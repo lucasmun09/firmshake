@@ -1,0 +1,7 @@
+{
+  "name": "firmshake",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "vue-vite"
+}
