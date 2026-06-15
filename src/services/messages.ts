@@ -5,6 +5,7 @@ import {
   onSnapshot,
   query,
   Timestamp,
+  where,
   type Unsubscribe,
 } from 'firebase/firestore';
 
@@ -44,6 +45,45 @@ function sortMessages(messages: Message[]): Message[] {
   });
 }
 
+function mergeMessageSnapshots(
+  listingId: string,
+  snapshots: Array<{ id: string; data: () => Record<string, unknown> }>,
+): Message[] {
+  const byId = new Map<string, Message>();
+  for (const entry of snapshots) {
+    byId.set(entry.id, mapMessage(entry.id, listingId, entry.data()));
+  }
+  return sortMessages([...byId.values()]);
+}
+
+function messagesCollection(listingId: string) {
+  if (!db) {
+    throw new Error('Firestore is not configured');
+  }
+
+  return collection(db, 'listings', listingId, 'messages');
+}
+
+async function fetchSellerMessages(listingId: string): Promise<Message[]> {
+  const snapshot = await getDocs(query(messagesCollection(listingId)));
+  return sortMessages(
+    snapshot.docs.map((entry) => mapMessage(entry.id, listingId, entry.data())),
+  );
+}
+
+async function fetchParticipantMessages(
+  listingId: string,
+  participantId: string,
+): Promise<Message[]> {
+  const ref = messagesCollection(listingId);
+  const [sentSnapshot, receivedSnapshot] = await Promise.all([
+    getDocs(query(ref, where('senderId', '==', participantId))),
+    getDocs(query(ref, where('recipientId', '==', participantId))),
+  ]);
+
+  return mergeMessageSnapshots(listingId, [...sentSnapshot.docs, ...receivedSnapshot.docs]);
+}
+
 export function getMessageAccessOptions(
   listing: Listing,
   userId: string,
@@ -68,16 +108,75 @@ export async function fetchListingMessages(
 
   await ensureFirestoreAuth();
 
-  const snapshot = await getDocs(query(collection(db, 'listings', listingId, 'messages')));
-  const messages = sortMessages(
-    snapshot.docs.map((entry) => mapMessage(entry.id, listingId, entry.data())),
-  );
-
-  if (options?.sellerId && options.participantId) {
-    return filterMessagesForParticipant(messages, options.sellerId, options.participantId);
+  if (options?.participantId) {
+    return fetchParticipantMessages(listingId, options.participantId);
   }
 
-  return messages;
+  return fetchSellerMessages(listingId);
+}
+
+function subscribeSellerMessages(
+  listingId: string,
+  onData: (messages: Message[]) => void,
+  onError?: (error: Error) => void,
+): Unsubscribe {
+  return onSnapshot(
+    query(messagesCollection(listingId)),
+    (snapshot) => {
+      onData(
+        sortMessages(
+          snapshot.docs.map((entry) => mapMessage(entry.id, listingId, entry.data())),
+        ),
+      );
+    },
+    (error) => onError?.(error),
+  );
+}
+
+function subscribeParticipantMessages(
+  listingId: string,
+  participantId: string,
+  onData: (messages: Message[]) => void,
+  onError?: (error: Error) => void,
+): Unsubscribe {
+  const ref = messagesCollection(listingId);
+  let sentMessages: Message[] = [];
+  let receivedMessages: Message[] = [];
+
+  const emit = () => {
+    const byId = new Map<string, Message>();
+    for (const message of [...sentMessages, ...receivedMessages]) {
+      byId.set(message.id, message);
+    }
+    onData(sortMessages([...byId.values()]));
+  };
+
+  const unsubSent = onSnapshot(
+    query(ref, where('senderId', '==', participantId)),
+    (snapshot) => {
+      sentMessages = snapshot.docs.map((entry) =>
+        mapMessage(entry.id, listingId, entry.data()),
+      );
+      emit();
+    },
+    (error) => onError?.(error),
+  );
+
+  const unsubReceived = onSnapshot(
+    query(ref, where('recipientId', '==', participantId)),
+    (snapshot) => {
+      receivedMessages = snapshot.docs.map((entry) =>
+        mapMessage(entry.id, listingId, entry.data()),
+      );
+      emit();
+    },
+    (error) => onError?.(error),
+  );
+
+  return () => {
+    unsubSent();
+    unsubReceived();
+  };
 }
 
 export function subscribeListingMessages(
@@ -100,22 +199,23 @@ export function subscribeListingMessages(
         return;
       }
 
-      const messagesQuery = query(collection(db, 'listings', listingId, 'messages'));
+      if (options?.participantId) {
+        innerUnsub = subscribeParticipantMessages(
+          listingId,
+          options.participantId,
+          (messages) => {
+            const filtered =
+              options.sellerId && options.participantId
+                ? filterMessagesForParticipant(messages, options.sellerId, options.participantId)
+                : messages;
+            onData(filtered);
+          },
+          onError,
+        );
+        return;
+      }
 
-      innerUnsub = onSnapshot(
-        messagesQuery,
-        (snapshot) => {
-          const messages = sortMessages(
-            snapshot.docs.map((entry) => mapMessage(entry.id, listingId, entry.data())),
-          );
-          const filtered =
-            options?.sellerId && options.participantId
-              ? filterMessagesForParticipant(messages, options.sellerId, options.participantId)
-              : messages;
-          onData(filtered);
-        },
-        (error) => onError?.(error),
-      );
+      innerUnsub = subscribeSellerMessages(listingId, onData, onError);
     })
     .catch((error) => {
       onError?.(error instanceof Error ? error : new Error(String(error)));
@@ -145,7 +245,7 @@ async function notifyMessageRecipient(
     if (senderId !== listing.sellerId) {
       recipientId = listing.sellerId;
     } else {
-      const recentMessages = await fetchListingMessages(listingId);
+      const recentMessages = await fetchSellerMessages(listingId);
       const latestBuyerMessage = [...recentMessages]
         .reverse()
         .find((message) => message.senderId !== listing.sellerId);

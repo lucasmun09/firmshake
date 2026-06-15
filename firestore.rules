@@ -53,9 +53,11 @@ service cloud.firestore {
 
       match /messages/{messageId} {
         allow read: if request.auth != null
+          && request.auth.uid == get(/databases/$(database)/documents/listings/$(listingId)).data.sellerId;
+
+        allow read: if request.auth != null
           && (
-            request.auth.uid == get(/databases/$(database)/documents/listings/$(listingId)).data.sellerId
-            || resource.data.senderId == request.auth.uid
+            resource.data.senderId == request.auth.uid
             || resource.data.recipientId == request.auth.uid
           );
 
