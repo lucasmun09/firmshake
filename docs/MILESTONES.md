@@ -29,37 +29,57 @@ API-specific milestones are tracked in **firmshake-api**.
 
 | Task | Status |
 |---|---|
-| Listing feed with mock data | Scaffolded |
-| Community filter (ALL + specific) | Scaffolded |
-| Listing detail page | Scaffolded |
-| Create listing form | Scaffolded |
-| Seed admin-curated communities in Firestore | TODO |
-| Join/leave user communities | TODO |
+| Listing feed with mock data | Firestore realtime |
+| Community filter (ALL + specific) | Firestore |
+| Listing detail page | Firestore |
+| Create listing form | Firestore |
+| Seed admin-curated communities in Firestore | Auto-seed on login |
+| Join/leave user communities | Profile page |
+| Create user communities | Profile page |
 
-## Phase 3 — API images
+## Phase 3 — API images ✅
 
 **Requires firmshake-api running.**
 
 | Task | Status |
 |---|---|
-| Image picker in create-listing flow | Scaffolded |
-| Upload to `POST /api/images` | Scaffolded |
-| Display images from API URL | Scaffolded |
-| Tunnel setup for mobile dev | TODO |
+| Image picker in create-listing flow | Web file + native camera |
+| Upload to `POST /api/images` | Wired with API health check |
+| Display images from API URL | Wired |
+| Tunnel setup for mobile dev | Documented in README |
 
-## Phase 4–7
+## Phase 4 — Communication ✅
 
-See prior roadmap: communication → meetup/proximity → deposits → full payments.
+| Task | Status |
+|---|---|
+| Listing chat (Firestore messages) | Realtime on listing detail |
+| Push notifications (FCM) | Done — web + native registration, API delivery |
+
+## Phase 5 — Meetup + proximity (in progress)
+
+| Task | Status |
+|---|---|
+| Google Sign-In | Done |
+| Binding meetup proposal flow | Done |
+| Seller accept / decline | Done |
+| Deposit step (mock, pre-Stripe) | Done |
+| En route + location polling | Done |
+| Flask ETA calculation | firmshake-api `/api/meetups/{id}/location` |
+| Privacy: ETA only to other party | Server-side Firestore updates |
+| Stripe deposit collection | Phase 6 |
+
+## Phase 6–7
+
+Stripe deposits → full payments + no-show penalties.
 
 ---
 
 ## Immediate next steps
 
-1. **Create Firebase project** — [FIREBASE_SETUP.md](FIREBASE_SETUP.md)
-2. **Fill in `.env.local`** from `.env.example`
-3. **Start API:** `cd ../firmshake-api && python app.py`
-4. **Start app:** `npm run dev`
-5. **Complete Phase 1** — verify login end-to-end with Firebase
+1. **API service account** — see firmshake-api README (`GOOGLE_APPLICATION_CREDENTIALS`)
+2. **Start API:** `cd ../firmshake-api && source .venv/bin/activate && python app.py`
+3. **Start app:** `npm run dev`
+4. **Test meetup flow** — buyer starts meetup → MeetupPage → share location
 
 ## Related repo
 

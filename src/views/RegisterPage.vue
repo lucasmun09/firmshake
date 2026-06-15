@@ -7,6 +7,7 @@
     </ion-header>
 
     <ion-content class="ion-padding">
+      <AppContentFrame>
       <form @submit.prevent="handleRegister">
         <ion-item>
           <ion-input
@@ -53,6 +54,19 @@
       <ion-button fill="clear" expand="block" router-link="/login">
         Already have an account? Sign in
       </ion-button>
+
+      <div class="divider">or</div>
+
+      <ion-button
+        expand="block"
+        fill="outline"
+        color="medium"
+        :disabled="loading"
+        @click="handleGoogleRegister"
+      >
+        {{ loading ? 'Signing in...' : 'Continue with Google' }}
+      </ion-button>
+      </AppContentFrame>
     </ion-content>
   </ion-page>
 </template>
@@ -72,7 +86,9 @@ import {
   IonToolbar,
 } from '@ionic/vue';
 
-import { registerWithEmail } from '@/services/auth';
+import { loginWithGoogle, registerWithEmail } from '@/services/auth';
+import AppContentFrame from '@/components/AppContentFrame.vue';
+import { formatAuthError } from '@/utils/authErrors';
 
 const router = useRouter();
 
@@ -90,7 +106,23 @@ async function handleRegister() {
     await registerWithEmail(email.value, password.value, displayName.value);
     router.replace('/tabs/home');
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Registration failed';
+    error.value = formatAuthError(err, 'register');
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function handleGoogleRegister() {
+  error.value = '';
+  loading.value = true;
+
+  try {
+    const user = await loginWithGoogle();
+    if (user) {
+      router.replace('/tabs/home');
+    }
+  } catch (err) {
+    error.value = formatAuthError(err, 'google');
   } finally {
     loading.value = false;
   }
@@ -104,5 +136,11 @@ async function handleRegister() {
 
 .submit-btn {
   margin-top: 1rem;
+}
+
+.divider {
+  text-align: center;
+  color: var(--ion-color-medium);
+  margin: 1rem 0;
 }
 </style>

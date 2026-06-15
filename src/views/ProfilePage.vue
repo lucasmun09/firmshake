@@ -7,33 +7,35 @@
     </ion-header>
 
     <ion-content class="ion-padding">
-      <div v-if="currentUser" class="profile-card">
-        <h2>{{ currentUser.displayName ?? 'FirmShake User' }}</h2>
-        <p>{{ currentUser.email }}</p>
-      </div>
+      <AppContentFrame>
+        <div v-if="currentUser" class="profile-card">
+          <h2>{{ currentUser.displayName ?? 'FirmShake User' }}</h2>
+          <p>{{ currentUser.email }}</p>
+        </div>
 
-      <ion-list>
-        <ion-item>
-          <ion-label>
-            <h3>API status</h3>
-            <p>{{ apiHealthy ? 'Flask server reachable' : 'Flask server offline' }}</p>
-          </ion-label>
-          <ion-badge :color="apiHealthy ? 'success' : 'warning'" slot="end">
-            {{ apiHealthy ? 'Online' : 'Offline' }}
-          </ion-badge>
-        </ion-item>
+        <ion-list>
+          <ion-item>
+            <ion-label>
+              <h3>API status</h3>
+              <p>{{ apiHealthy ? 'Flask server reachable' : 'Flask server offline' }}</p>
+            </ion-label>
+            <ion-badge :color="apiHealthy ? 'success' : 'warning'" slot="end">
+              {{ apiHealthy ? 'Online' : 'Offline' }}
+            </ion-badge>
+          </ion-item>
 
-        <ion-item>
-          <ion-label>
-            <h3>Firebase</h3>
-            <p>{{ firebaseStatus }}</p>
-          </ion-label>
-        </ion-item>
-      </ion-list>
+          <ion-item>
+            <ion-label>
+              <h3>Firebase</h3>
+              <p>{{ firebaseStatus }}</p>
+            </ion-label>
+          </ion-item>
+        </ion-list>
 
-      <ion-button expand="block" color="medium" class="logout-btn" @click="handleLogout">
-        Sign out
-      </ion-button>
+        <ion-button expand="block" color="medium" class="logout-btn" @click="handleLogout">
+          Sign out
+        </ion-button>
+      </AppContentFrame>
     </ion-content>
   </ion-page>
 </template>
@@ -55,6 +57,7 @@ import {
 } from '@ionic/vue';
 
 import { checkApiHealth } from '@/services/api';
+import AppContentFrame from '@/components/AppContentFrame.vue';
 import { currentUser, logout } from '@/services/auth';
 import { isFirebaseConfigured } from '@/services/firebase';
 

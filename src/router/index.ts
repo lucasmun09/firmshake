@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from '@ionic/vue-router';
 import type { RouteRecordRaw } from 'vue-router';
 
 import { authReady, currentUser } from '@/services/auth';
+import { registerPushNavigationHandler } from '@/services/pushNotifications';
 import TabsPage from '@/views/TabsPage.vue';
 
 const routes: Array<RouteRecordRaw> = [
@@ -33,9 +34,19 @@ const routes: Array<RouteRecordRaw> = [
         component: () => import('@/views/HomePage.vue'),
       },
       {
+        path: 'communities',
+        name: 'Communities',
+        component: () => import('@/views/CommunitiesPage.vue'),
+      },
+      {
         path: 'sell',
         name: 'Sell',
         component: () => import('@/views/CreateListingPage.vue'),
+      },
+      {
+        path: 'inbox',
+        name: 'Inbox',
+        component: () => import('@/views/InboxPage.vue'),
       },
       {
         path: 'profile',
@@ -45,9 +56,33 @@ const routes: Array<RouteRecordRaw> = [
     ],
   },
   {
+    path: '/communities/create',
+    name: 'CreateCommunity',
+    component: () => import('@/views/CreateCommunityPage.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/inbox/listing/:id',
+    name: 'ListingMessages',
+    component: () => import('@/views/ListingMessagesPage.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/listing/:id/propose-meetup',
+    name: 'MeetupProposal',
+    component: () => import('@/views/MeetupProposalPage.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/listing/:id',
     name: 'ListingDetail',
     component: () => import('@/views/ListingDetailPage.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/meetup/:id',
+    name: 'Meetup',
+    component: () => import('@/views/MeetupPage.vue'),
     meta: { requiresAuth: true },
   },
 ];
@@ -82,6 +117,24 @@ router.beforeEach(async (to) => {
   }
 
   return true;
+});
+
+registerPushNavigationHandler((payload) => {
+  if (payload.listingId && payload.type === 'message') {
+    const path =
+      payload.actorId
+        ? `/inbox/listing/${payload.listingId}?buyerId=${encodeURIComponent(payload.actorId)}`
+        : `/inbox/listing/${payload.listingId}`;
+    void router.push(path);
+    return;
+  }
+
+  if (payload.listingId) {
+    void router.push(`/listing/${payload.listingId}`);
+    return;
+  }
+
+  void router.push('/tabs/inbox');
 });
 
 export default router;

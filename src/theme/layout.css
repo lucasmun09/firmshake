@@ -1,0 +1,22 @@
+/*
+ * Wide-viewport layout: keep chrome full width, cap main content to a 4:3
+ * column based on viewport height. Portrait / mobile aspect ratios are unchanged.
+ */
+@media (min-aspect-ratio: 4/3) {
+  .app-content-frame {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: calc(100vh * 4 / 3);
+    margin-inline: auto;
+  }
+
+  ion-toolbar.app-toolbar-content {
+    --padding-start: 0;
+    --padding-end: 0;
+  }
+
+  ion-tab-bar.app-chrome-full {
+    width: 100%;
+    max-width: none;
+  }
+}

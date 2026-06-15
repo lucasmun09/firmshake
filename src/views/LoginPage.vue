@@ -7,6 +7,7 @@
     </ion-header>
 
     <ion-content class="ion-padding">
+      <AppContentFrame>
       <h1 class="title">Sign in</h1>
       <p class="subtitle">Community marketplace with binding meetups.</p>
 
@@ -46,10 +47,23 @@
         Create an account
       </ion-button>
 
+      <div class="divider">or</div>
+
+      <ion-button
+        expand="block"
+        fill="outline"
+        color="medium"
+        :disabled="loading"
+        @click="handleGoogleLogin"
+      >
+        {{ loading ? 'Signing in...' : 'Continue with Google' }}
+      </ion-button>
+
       <ion-note v-if="!isFirebaseConfigured" class="setup-note">
         Firebase is not configured. Copy <code>.env.example</code> to
         <code>.env.local</code> and follow <code>docs/FIREBASE_SETUP.md</code>.
       </ion-note>
+      </AppContentFrame>
     </ion-content>
   </ion-page>
 </template>
@@ -70,8 +84,10 @@ import {
   IonToolbar,
 } from '@ionic/vue';
 
-import { loginWithEmail } from '@/services/auth';
+import { loginWithEmail, loginWithGoogle } from '@/services/auth';
+import AppContentFrame from '@/components/AppContentFrame.vue';
 import { isFirebaseConfigured } from '@/services/firebase';
+import { formatAuthError } from '@/utils/authErrors';
 
 const router = useRouter();
 
@@ -88,7 +104,22 @@ async function handleLogin() {
     await loginWithEmail(email.value, password.value);
     router.replace('/tabs/home');
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Sign in failed';
+    error.value = formatAuthError(err, 'login');
+  } finally {
+    loading.value = false;
+  }
+}
+async function handleGoogleLogin() {
+  error.value = '';
+  loading.value = true;
+
+  try {
+    const user = await loginWithGoogle();
+    if (user) {
+      router.replace('/tabs/home');
+    }
+  } catch (err) {
+    error.value = formatAuthError(err, 'google');
   } finally {
     loading.value = false;
   }
@@ -111,6 +142,12 @@ async function handleLogin() {
 
 .submit-btn {
   margin-top: 1rem;
+}
+
+.divider {
+  text-align: center;
+  color: var(--ion-color-medium);
+  margin: 1rem 0;
 }
 
 .setup-note {

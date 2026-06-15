@@ -41,8 +41,13 @@ API runs at `http://localhost:5001`.
 ### 3. Run the app
 
 ```bash
-npm install
-npm run dev
+./start.sh
+```
+
+Or:
+
+```bash
+npm start
 ```
 
 Web dev server: `http://localhost:5173`.
