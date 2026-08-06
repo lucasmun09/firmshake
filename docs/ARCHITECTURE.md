@@ -72,3 +72,5 @@ Listings carry `communityIds: string[]`. Inclusion of `all` means visible in the
 |---|---|
 | **firmshake** | This client |
 | **firmshake-api** | Flask server — see its `docs/ARCHITECTURE.md` for API design |
+
+For the planned Backend-for-Frontend migration strategy, see [BFF_PLAN.md](./BFF_PLAN.md).

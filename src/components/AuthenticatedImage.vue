@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 
-import { resolveAuthenticatedImageUrl } from '@/services/images';
+import { resolveAuthenticatedImageUrl } from '@/common/services/images';
 
 defineOptions({
   inheritAttrs: false,

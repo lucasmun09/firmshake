@@ -42,7 +42,24 @@ Ensure **localhost** is in **Authentication → Settings → Authorized domains*
 
 Ensure **localhost** is in **Authentication → Settings → Authorized domains** (usually added by default).
 
-### 4. Enable web push (FCM)
+### 4. Enable SMS multi-factor authentication (optional)
+
+Email/password and Google users must verify a phone number via SMS before using the app. There is no skip option.
+
+1. Upgrade the project to the **Blaze (pay as you go)** plan — SMS MFA is not available on the free Spark plan.
+2. Open [Authentication → Sign-in method](https://console.firebase.google.com/project/firmshake-dev/authentication/providers).
+3. Under **Advanced**, enable **SMS Multi-factor Authentication**.
+4. Open [Authentication → Settings](https://console.firebase.google.com/project/firmshake-dev/authentication/settings).
+5. Under **SMS region policy**, choose **Allow** and select the countries where your users are (e.g. **United States**).
+6. While developing, add **Phone numbers for testing** under Advanced to avoid SMS rate limits.
+
+**SMS region policy alone is not enough.** You must also enable **SMS Multi-factor Authentication** under Sign-in method → Advanced. Without it, enrollment returns `auth/operation-not-allowed` even when the region policy allows your country.
+
+Optional but recommended: enable the **Phone** sign-in provider on the same page (some projects require it for SMS delivery during MFA enrollment).
+
+Until SMS MFA is fully configured, users cannot access the app until they complete phone verification.
+
+### 5. Enable web push (FCM)
 
 1. Open [Project settings → Cloud Messaging](https://console.firebase.google.com/project/firmshake-dev/settings/cloudmessaging)
 2. Under **Web Push certificates**, click **Generate key pair**
@@ -66,7 +83,7 @@ npm run firebase:deploy-rules
 
 Push delivery also requires **firmshake-api** running with a Firebase service account (`GOOGLE_APPLICATION_CREDENTIALS`).
 
-### 5. Verify
+### 6. Verify
 
 ```bash
 # Terminal 1 — API
@@ -148,5 +165,6 @@ npm run firebase:deploy-rules
 |---|---|
 | `Firebase is not configured` | Run `npm run firebase:setup` or fill `.env.local` manually |
 | `auth/operation-not-allowed` | Enable Email/Password in Firebase Console |
+| `auth/operation-not-allowed` (SMS MFA) | Enable **SMS Multi-factor Authentication** under Authentication → Sign-in method → Advanced (not just SMS region policy); upgrade to Blaze; allow your SMS region in Authentication → Settings; optionally enable the **Phone** sign-in provider |
 | `permission-denied` on Firestore | Run `npm run firebase:deploy-rules` |
 | API images fail | Start firmshake-api: `python app.py` |

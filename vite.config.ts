@@ -9,7 +9,17 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   plugins: [
     vue(),
-    legacy()
+    legacy(),
+    {
+      name: 'inject-app-build-meta',
+      transformIndexHtml(html) {
+        const buildId = process.env.VITE_APP_BUILD_ID ?? Date.now().toString(36);
+        return html.replace(
+          '<meta http-equiv="Cache-Control" content="no-cache" />',
+          `<meta http-equiv="Cache-Control" content="no-cache" />\n    <meta name="app-build" content="${buildId}" />`,
+        );
+      },
+    },
   ],
   resolve: {
     alias: {

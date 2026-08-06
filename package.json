@@ -9,12 +9,15 @@
     "build": "vue-tsc && vite build",
     "preview": "vite preview",
     "test:e2e": "cypress run",
+    "test:e2e:open": "cypress open",
+    "test:e2e:smoke": "cypress run --spec tests/e2e/specs/auth.smoke.cy.ts,tests/e2e/specs/auth.login.cy.ts,tests/e2e/specs/auth.register.cy.ts,tests/e2e/specs/mfa.cy.ts,tests/e2e/specs/browse.filter.cy.ts,tests/e2e/specs/listing.upload.cy.ts,tests/e2e/specs/listing.detail.cy.ts,tests/e2e/specs/messages.cy.ts,tests/e2e/specs/communities.cy.ts,tests/e2e/specs/selling.cy.ts,tests/e2e/specs/buying.cy.ts,tests/e2e/specs/meetups.cy.ts,tests/e2e/specs/profile.cy.ts",
     "test:unit": "vitest",
     "lint": "eslint .",
     "firebase:setup": "bash scripts/setup-firebase.sh",
     "firebase:deploy-rules": "firebase deploy --only firestore:rules",
     "deploy:hosting": "npm run build && firebase deploy --only hosting",
-    "firebase:seed": "node scripts/seed-communities.mjs"
+    "firebase:seed": "node scripts/seed-communities.mjs",
+    "firebase:backfill-feeds": "node scripts/backfill-listing-feeds.mjs"
   },
   "dependencies": {
     "@capacitor/app": "8.1.0",
@@ -25,6 +28,7 @@
     "@capacitor/keyboard": "8.0.3",
     "@capacitor/push-notifications": "^8.0.2",
     "@capacitor/status-bar": "8.0.2",
+    "@googlemaps/js-api-loader": "^2.1.1",
     "@ionic/vue": "^8.0.0",
     "@ionic/vue-router": "^8.0.0",
     "firebase": "^12.14.0",
@@ -34,6 +38,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "8.4.0",
+    "@types/google.maps": "^3.65.1",
     "@vitejs/plugin-legacy": "^5.0.0",
     "@vitejs/plugin-vue": "^4.0.0",
     "@vue/eslint-config-typescript": "^12.0.0",

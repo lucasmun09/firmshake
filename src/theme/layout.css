@@ -2,6 +2,12 @@
  * Wide-viewport layout: keep chrome full width, cap main content to a 4:3
  * column based on viewport height. Portrait / mobile aspect ratios are unchanged.
  */
+
+/* reCAPTCHA v3 injects a floating badge; disclosure lives on login/register pages. */
+.grecaptcha-badge {
+  visibility: hidden !important;
+}
+
 @media (min-aspect-ratio: 4/3) {
   .app-content-frame {
     box-sizing: border-box;
