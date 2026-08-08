@@ -20,7 +20,7 @@
           Post a listing
         </ion-button>
 
-        <ion-button expand="block" fill="outline" router-link="/blockedusers" class="shortcut-btn">
+        <ion-button expand="block" fill="outline" router-link="/tabs/blockedusers" class="shortcut-btn">
           Blocked users
         </ion-button>
 

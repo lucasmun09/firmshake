@@ -1,10 +1,6 @@
 <template>
   <ion-page>
-    <ion-header>
-      <ion-toolbar color="primary">
-        <ion-title>Communities</ion-title>
-      </ion-toolbar>
-    </ion-header>
+    <AppTopToolbar title="Communities" show-back-button back-href="/tabs/profile" />
 
     <ion-content class="ion-padding">
       <AppContentFrame>
@@ -95,7 +91,7 @@
         </div>
 
         <h3 class="section-title">Create a community</h3>
-        <ion-button expand="block" router-link="/communities/create">
+        <ion-button expand="block" router-link="/tabs/communities/create">
           Create community
         </ion-button>
       </AppContentFrame>
@@ -110,18 +106,16 @@ import {
   IonBadge,
   IonButton,
   IonContent,
-  IonHeader,
   IonInput,
   IonItem,
   IonLabel,
   IonList,
   IonPage,
-  IonTitle,
-  IonToolbar,
   toastController,
 } from '@ionic/vue';
 
 import AppContentFrame from '@/components/AppContentFrame.vue';
+import AppTopToolbar from '@/components/AppTopToolbar.vue';
 import CommunityModeratorPanel from '@/features/communities/components/CommunityModeratorPanel.vue';
 import { ALL_COMMUNITY_ID } from '@/features/communities/data/seedCommunities';
 import { currentUser } from '@/features/auth/services/auth';
@@ -151,11 +145,11 @@ const joinedCommunities = computed(() => {
 
 const createCommunityLink = computed(() => {
   if (!lastSearchName.value) {
-    return '/communities/create';
+    return '/tabs/communities/create';
   }
 
   return {
-    path: '/communities/create',
+    path: '/tabs/communities/create',
     query: { name: lastSearchName.value },
   };
 });

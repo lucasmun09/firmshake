@@ -199,9 +199,10 @@
 
 <script setup lang="ts">
 import { formatPrice } from '@/utils/currency';
-import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { onIonViewWillEnter } from '@ionic/vue';
+import { formatDocumentTitle } from '@/router/pageTitle';
 import {
   IonBackButton,
   IonButton,
@@ -243,12 +244,18 @@ import {
   subscribeListingAgreements,
 } from '@/common/services/agreements';
 import { authReady, currentUser } from '@/features/auth/services/auth';
+import { debugLog, serializeError } from '@/common/debug/debugLog';
 import {
   bootstrapCommunities,
   bootstrapProfile,
   waitForBootstrap,
 } from '@/common/services/appBootstrap';
-import { fetchCategories, getCategoryName } from '@/features/listings/services/categories';
+import { SEED_CATEGORIES } from '@/features/listings/data/seedCategories';
+import {
+  fetchCategories,
+  getCategoryName,
+  getStaleCategories,
+} from '@/features/listings/services/categories';
 import { getCommunityName } from '@/features/communities/services/communities';
 import { getListingById, removeListing } from '@/features/listings/services/listings';
 import { prefetchAuthenticatedImages } from '@/common/services/images';
@@ -518,7 +525,7 @@ let unsubscribeBlockedByMe: (() => void) | undefined;
 let unsubscribeBlockedByOther: (() => void) | undefined;
 let unsubscribeBuyerAgreement: (() => void) | undefined;
 let unsubscribeSellerAgreements: (() => void) | undefined;
-let loadingListingFor: string | null = null;
+let loadListingGeneration = 0;
 let blockeeCancelInFlight: string | null = null;
 
 function stopAgreementSubscriptions() {
@@ -684,13 +691,38 @@ async function waitForAuthReady() {
   });
 }
 
-async function loadListing() {
+async function loadCategoriesForDetail(): Promise<typeof categories.value> {
+  try {
+    const loaded = await fetchCategories();
+    debugLog.debug('listing-detail', 'Categories loaded for listing detail', {
+      count: loaded.length,
+    });
+    return loaded;
+  } catch (error) {
+    debugLog.warn('listing-detail', 'Failed to load categories for listing detail', {
+      error: serializeError(error),
+    });
+    console.warn('Failed to load categories for listing detail', error);
+    return getStaleCategories() ?? categories.value ?? SEED_CATEGORIES;
+  }
+}
+
+async function loadListing(options?: { force?: boolean }) {
   const listingId = route.params.id as string;
-  if (loadingListingFor === listingId) {
+  if (!listingId) {
+    loading.value = false;
+    debugLog.warn('listing-detail', 'loadListing skipped: missing route id', {
+      params: route.params,
+    });
     return;
   }
 
-  loadingListingFor = listingId;
+  if (!options?.force && listing.value?.id === listingId) {
+    debugLog.debug('listing-detail', 'loadListing skipped: listing already loaded', { listingId });
+    return;
+  }
+
+  const generation = ++loadListingGeneration;
   loading.value = true;
   messagesError.value = '';
   messagesReady.value = false;
@@ -702,15 +734,49 @@ async function loadListing() {
   buyerAgreement.value = null;
   sellerAgreements.value = [];
 
+  debugLog.info('listing-detail', 'loadListing started', {
+    listingId,
+    generation,
+    force: options?.force ?? false,
+    authReady: authReady.value,
+    isGuest: authReady.value && !currentUser.value,
+    uid: currentUser.value?.uid ?? null,
+  });
+
   try {
     await waitForAuthReady();
     await waitForBootstrap();
-    categories.value = await fetchCategories();
 
-    const loadedListing = await getListingById(listingId, { preferCache: true });
+    const [loadedListing, loadedCategories] = await Promise.all([
+      getListingById(listingId, { preferCache: true, preferServer: true }),
+      loadCategoriesForDetail(),
+    ]);
+
+    if (generation !== loadListingGeneration) {
+      debugLog.debug('listing-detail', 'loadListing result discarded: stale generation', {
+        listingId,
+        generation,
+        latestGeneration: loadListingGeneration,
+      });
+      return;
+    }
+
+    categories.value = loadedCategories;
     const loadedCommunities = bootstrapCommunities.value;
 
     listing.value = loadedListing;
+
+    debugLog.info('listing-detail', 'loadListing finished', {
+      listingId,
+      found: Boolean(loadedListing),
+      status: loadedListing?.status ?? null,
+      title: loadedListing?.title ?? null,
+      categoryCount: loadedCategories.length,
+      communityCount: loadedCommunities.length,
+      nullReason: loadedListing
+        ? null
+        : 'getListingById returned null (doc missing on server or unreadable)',
+    });
 
     if (loadedListing) {
       categoryName.value = getCategoryName(categories.value, loadedListing.primaryCategoryId);
@@ -732,14 +798,22 @@ async function loadListing() {
       }
     }
   } catch (error) {
+    debugLog.error('listing-detail', 'loadListing failed', {
+      listingId,
+      generation,
+      authReady: authReady.value,
+      uid: currentUser.value?.uid ?? null,
+      error: serializeError(error),
+    });
     console.error('Failed to load listing', error);
   } finally {
-    loading.value = false;
-    loadingListingFor = null;
-    await nextTick();
-    setupPanelHeightObserver();
-    if (useNestedChatScroll.value) {
-      await scrollToLatest();
+    if (generation === loadListingGeneration) {
+      loading.value = false;
+      await nextTick();
+      setupPanelHeightObserver();
+      if (useNestedChatScroll.value) {
+        await scrollToLatest();
+      }
     }
   }
 }
@@ -783,10 +857,31 @@ watch(activeAgreementForBlock, () => {
   }
 });
 
-onIonViewWillEnter(() => {
-  void loadListing().catch((error) => {
+watch(
+  () => listing.value?.title,
+  (title) => {
+    if (title?.trim()) {
+      document.title = formatDocumentTitle(title.trim());
+    }
+  },
+);
+
+function scheduleListingLoad(options?: { force?: boolean }) {
+  void loadListing(options).catch((error) => {
+    debugLog.error('listing-detail', 'Failed to load listing page', {
+      listingId: route.params.id,
+      error: serializeError(error),
+    });
     console.error('Failed to load listing page', error);
   });
+}
+
+onMounted(scheduleListingLoad);
+
+onIonViewWillEnter(() => {
+  if (!listing.value || listing.value.id !== route.params.id) {
+    scheduleListingLoad({ force: !listing.value });
+  }
 });
 
 onUnmounted(() => {

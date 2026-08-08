@@ -1,13 +1,6 @@
 <template>
   <ion-page>
-    <ion-header>
-      <ion-toolbar>
-        <ion-buttons slot="start">
-          <ion-back-button default-href="/tabs/communities" />
-        </ion-buttons>
-        <ion-title>Create community</ion-title>
-      </ion-toolbar>
-    </ion-header>
+    <AppTopToolbar title="Create Community" show-back-button back-href="/tabs/communities" />
 
     <ion-content class="ion-padding">
       <AppContentFrame>
@@ -34,17 +27,13 @@
 import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
-  IonBackButton,
-  IonButtons,
   IonContent,
-  IonHeader,
   IonPage,
-  IonTitle,
-  IonToolbar,
   toastController,
 } from '@ionic/vue';
 
 import AppContentFrame from '@/components/AppContentFrame.vue';
+import AppTopToolbar from '@/components/AppTopToolbar.vue';
 import CreateCommunityForm from '@/features/communities/components/CreateCommunityForm.vue';
 import type { Community } from '@/types';
 

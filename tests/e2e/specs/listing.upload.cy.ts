@@ -9,12 +9,28 @@ describeWithMfaAuth('Listing upload — create listing', () => {
   });
 
   it('loads the sell form with required fields', () => {
-    cy.contains('ion-title', 'Sell on FirmShake').should('be.visible');
+    cy.contains('.toolbar-title', 'FirmShake - Sell on FirmShake').should('be.visible');
     cy.get('ion-input[label="Title"]').should('exist');
     cy.get('ion-textarea[label="Description"]').should('exist');
     cy.get('ion-input[label="Price (USD)"]').should('exist');
     cy.get('ion-select[label="Category"]').should('exist');
     cy.get('ion-select[label="Communities"]').should('exist');
+  });
+
+  it('shows backend wait modal when API health check is slow', () => {
+    cy.intercept('GET', '**/health', (req) => {
+      req.reply({
+        delay: 2500,
+        statusCode: 200,
+        body: { ok: true },
+      });
+    }).as('slowApiHealth');
+
+    cy.visitApp('/tabs/sell');
+    cy.get('ion-modal.backend-wait-modal', { timeout: 10_000 }).should('be.visible');
+    cy.contains('Connecting to FirmShake').should('be.visible');
+    cy.wait('@slowApiHealth');
+    cy.get('ion-modal.backend-wait-modal', { timeout: 10_000 }).should('not.be.visible');
   });
 
   it('validates submit stays disabled until required fields are filled', () => {

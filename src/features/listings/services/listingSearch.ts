@@ -1,4 +1,5 @@
 import { debugLog } from '@/common/debug/debugLog';
+import { useBffBrowse } from '@/common/config/featureFlags';
 import { loggedFetch } from '@/common/debug/loggedFetch';
 import { authHeaders } from '@/common/services/api';
 import { logListingSearchResults } from '@/features/listings/utils/geoDebugLog';
@@ -70,6 +71,23 @@ function mapSearchHit(hit: Record<string, unknown>): Listing {
 }
 
 export async function searchListings(params: ListingSearchParams): Promise<ListingSearchResult> {
+  if (useBffBrowse()) {
+    const { searchBrowseListings } = await import('@/features/listings/services/browseSearch');
+    return searchBrowseListings({
+      q: params.q,
+      communityId: params.communityId,
+      categoryId: params.categoryId,
+      priceMin: params.minPrice,
+      priceMax: params.maxPrice,
+      lat: params.lat,
+      lng: params.lng,
+      radiusMiles: params.radiusKm != null ? params.radiusKm / 1.60934 : undefined,
+      page: params.page,
+      pageSize: params.pageSize,
+      forceRefresh: params.forceRefresh,
+    });
+  }
+
   if (!isApiConfigured()) {
     return { listings: [], total: 0, page: 1, pageSize: params.pageSize ?? 24, hasMore: false };
   }

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getTabBootTitle,
   isDirectTabFeedPath,
+  isLeavingSettingsHub,
   isTabsShellSwitch,
   isWithinTabsShell,
   shouldDeferPostAuthChecks,
@@ -65,6 +66,38 @@ describe('shouldDeferPostAuthChecks', () => {
 
   it('does not defer for routes outside tabs shell', () => {
     expect(shouldDeferPostAuthChecks({ path: '/tabs/home' }, { path: '/listing/x' })).toBe(false);
+  });
+});
+
+describe('isLeavingSettingsHub', () => {
+  it('skips post-auth when leaving settings for another tabs route', () => {
+    expect(
+      isLeavingSettingsHub(
+        { path: '/tabs/profile', meta: { skipAuthFlow: true } },
+        { path: '/tabs/communities' },
+      ),
+    ).toBe(true);
+    expect(
+      isLeavingSettingsHub(
+        { path: '/tabs/profile', meta: { skipAuthFlow: true } },
+        { path: '/tabs/blockedusers' },
+      ),
+    ).toBe(true);
+  });
+
+  it('does not skip post-auth when leaving settings for auth-flow routes', () => {
+    expect(
+      isLeavingSettingsHub(
+        { path: '/tabs/profile', meta: { skipAuthFlow: true } },
+        { path: '/mfa-enroll' },
+      ),
+    ).toBe(false);
+  });
+
+  it('does not skip post-auth from other tab routes', () => {
+    expect(
+      isLeavingSettingsHub({ path: '/tabs/selling' }, { path: '/tabs/sell' }),
+    ).toBe(false);
   });
 });
 

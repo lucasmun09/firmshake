@@ -1,6 +1,9 @@
 /** Minimal route shape for tabs-shell navigation checks. */
 export interface TabsRouteLike {
   path: string;
+  meta?: {
+    skipAuthFlow?: boolean;
+  };
 }
 
 const TAB_FEED_ROOTS = ['/tabs/buying', '/tabs/selling', '/tabs/inbox'] as const;
@@ -33,4 +36,9 @@ export { getTabBootTitle } from '@/router/pageTitle';
  */
 export function shouldDeferPostAuthChecks(from: TabsRouteLike, to: TabsRouteLike): boolean {
   return isTabsShellSwitch(from, to) || isWithinTabsShell(to.path);
+}
+
+/** Settings hub skips post-auth; its shortcuts should not re-run MFA/profile guards. */
+export function isLeavingSettingsHub(from: TabsRouteLike, to: TabsRouteLike): boolean {
+  return from.meta?.skipAuthFlow === true && isWithinTabsShell(to.path);
 }

@@ -28,20 +28,50 @@ function parseApiError(body: string, fallback: string): string {
   return body.trim() || fallback;
 }
 
+const API_HEALTH_ATTEMPT_TIMEOUT_MS = 8_000;
+/** Pause between retries — helps Cloud Run cold starts without blocking UI forever. */
+const API_HEALTH_RETRY_DELAYS_MS = [0, 2_000, 4_000];
+
+async function probeApiHealth(): Promise<boolean> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), API_HEALTH_ATTEMPT_TIMEOUT_MS);
+
+  try {
+    const response = await loggedFetch(
+      `${getApiBaseUrl()}/health`,
+      { signal: controller.signal },
+      {
+        category: 'api',
+        label: 'GET /health',
+      },
+    );
+    return response.ok;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 export async function checkApiHealth(): Promise<boolean> {
   if (!isApiConfigured()) {
     return false;
   }
 
-  try {
-    const response = await loggedFetch(`${getApiBaseUrl()}/health`, undefined, {
-      category: 'api',
-      label: 'GET /health',
-    });
-    return response.ok;
-  } catch {
-    return false;
+  for (let attempt = 0; attempt < API_HEALTH_RETRY_DELAYS_MS.length; attempt++) {
+    const delayMs = API_HEALTH_RETRY_DELAYS_MS[attempt];
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+
+    try {
+      if (await probeApiHealth()) {
+        return true;
+      }
+    } catch {
+      // Retry on network errors, timeouts, and aborts (e.g. cold start).
+    }
   }
+
+  return false;
 }
 
 export async function uploadImage(file: File, communityIds: string[]): Promise<string> {

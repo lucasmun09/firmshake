@@ -32,8 +32,6 @@
             <ion-icon :icon="chatbubbleOutline" />
             <ion-label>Inbox</ion-label>
           </ion-tab-button>
-          <!-- Settings lives in the top toolbar; keep a tab slot so Ionic can route here. -->
-          <ion-tab-button tab="profile" href="/tabs/profile" class="tab-hidden" />
         </template>
       </ion-tab-bar>
     </ion-tabs>
@@ -64,14 +62,21 @@ import {
   pricetagOutline,
 } from 'ionicons/icons';
 import { debugLog } from '@/common/debug/debugLog';
+import {
+  guestTabFeatureLabel,
+  isGuestProtectedTabPath,
+  promptGuestSignIn,
+} from '@/common/services/guestAuthUi';
 
 const route = useRoute();
 const ionRouter = useIonRouter();
 const tabNavigationPending = ref(false);
 const isMobileWebViewport = ref(false);
 
+const isGuest = computed(() => authReady.value && !currentUser.value);
+
 const showGuestTabBar = computed(
-  () => authReady.value && !currentUser.value && isMobileWebViewport.value,
+  () => isGuest.value && isMobileWebViewport.value,
 );
 
 let mobileWebMediaQuery: MediaQueryList | undefined;
@@ -108,6 +113,13 @@ function releaseTabNavigationLock() {
 function onTabClick(event: Event, path: string) {
   const currentPath = normalizePath(route.path);
   const targetPath = normalizePath(path);
+
+  if (isGuest.value && !isMobileWebViewport.value && isGuestProtectedTabPath(targetPath)) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    void promptGuestSignIn(ionRouter, guestTabFeatureLabel(targetPath));
+    return;
+  }
 
   if (currentPath === targetPath) {
     event.preventDefault();
@@ -146,9 +158,3 @@ function onTabClick(event: Event, path: string) {
 }
 </script>
 
-<style scoped>
-.tab-hidden {
-  display: none;
-  pointer-events: none;
-}
-</style>

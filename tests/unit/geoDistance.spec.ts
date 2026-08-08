@@ -6,6 +6,8 @@ import {
   MAX_RADIUS_MILES,
   milesToKm,
   MIN_RADIUS_MILES,
+  normalizeRadiusMiles,
+  RADIUS_OPTIONS_MILES,
 } from '@/features/listings/utils/geoDistance';
 
 describe('geoDistance', () => {
@@ -19,6 +21,13 @@ describe('geoDistance', () => {
     expect(clampRadiusMiles(1)).toBe(MIN_RADIUS_MILES);
     expect(clampRadiusMiles(50)).toBe(50);
     expect(clampRadiusMiles(500)).toBe(MAX_RADIUS_MILES);
+  });
+
+  it('normalizes radius miles to dropdown options', () => {
+    expect(RADIUS_OPTIONS_MILES).toEqual([5, 10, 20, 50, 100, 300]);
+    expect(normalizeRadiusMiles(10)).toBe(10);
+    expect(normalizeRadiusMiles(25)).toBe(20);
+    expect(normalizeRadiusMiles(75)).toBe(50);
   });
 });
 

@@ -1,104 +1,99 @@
 <template>
   <div class="browse-geo-filter">
-    <ion-item lines="none" class="toggle-row">
-      <ion-toggle
-        :checked="modelValue.enabled"
-        @ionChange="onToggle"
+    <p v-if="isLocating" class="hint">Finding your location…</p>
+    <p v-else-if="geoError" class="hint">{{ geoError }}</p>
+    <p v-else-if="centerLabel" class="center-label">
+      Near {{ centerLabel }}
+    </p>
+    <p v-else class="hint">Set a location to search nearby listings.</p>
+
+    <div class="radius-block">
+      <ion-select
+        :value="modelValue.radiusMiles"
+        interface="popover"
+        class="radius-select"
+        aria-label="Search radius in miles"
+        @ionChange="onRadiusChange"
       >
-        Search by distance
-      </ion-toggle>
-    </ion-item>
-
-    <template v-if="modelValue.enabled">
-      <p v-if="centerLabel" class="center-label">
-        Near {{ centerLabel }}
-      </p>
-      <p v-else-if="modelValue.locating" class="hint">Finding your location…</p>
-      <p v-else-if="geoError" class="hint warning">{{ geoError }}</p>
-      <p v-else class="hint">Set a location to search nearby listings.</p>
-
-      <div class="radius-block">
-        <ion-label class="radius-label">Within {{ modelValue.radiusMiles }} mi</ion-label>
-        <ion-range
-          :min="MIN_RADIUS_MILES"
-          :max="MAX_RADIUS_MILES"
-          :step="5"
-          :value="modelValue.radiusMiles"
-          @ionInput="onRadiusInput"
-        />
-      </div>
-
-      <div class="location-actions">
-        <ion-button
-          expand="block"
-          fill="outline"
-          size="small"
-          :disabled="modelValue.locating"
-          @click="useMyLocation"
+        <ion-select-option
+          v-for="option in RADIUS_OPTIONS_MILES"
+          :key="option"
+          :value="option"
         >
-          {{ modelValue.locating ? 'Locating…' : 'Use my location' }}
-        </ion-button>
-      </div>
+          Within {{ option }} mi
+        </ion-select-option>
+      </ion-select>
+    </div>
 
-      <div class="address-block">
-        <AddressAutocomplete
-          :model-value="addressLocation"
-          placeholder="Or search an address"
-          :show-current-location="false"
-          @update:model-value="onAddressSelected"
-        />
-      </div>
-
-      <ion-note v-if="!apiConfigured" class="api-hint">
-        Distance search uses cached listings when the API is unavailable; results may be incomplete.
-      </ion-note>
-
+    <div class="location-actions">
       <ion-button
-        v-if="hasActiveCenter"
         expand="block"
-        fill="clear"
+        fill="outline"
         size="small"
-        class="clear-btn"
-        @click="clearFilter"
+        :disabled="isLocating"
+        @click="useMyLocation"
       >
-        Clear distance filter
+        {{ isLocating ? 'Locating…' : 'Use my location' }}
       </ion-button>
-    </template>
+    </div>
+
+    <div class="address-block">
+      <AddressAutocomplete
+        :model-value="addressLocation"
+        placeholder="Or search an address"
+        :show-current-location="false"
+        @update:model-value="onAddressSelected"
+      />
+    </div>
+
+    <ion-note v-if="!apiConfigured" class="api-hint">
+      Distance search uses cached listings when the API is unavailable; results may be incomplete.
+    </ion-note>
+
+    <ion-button
+      v-if="hasActiveCenter"
+      expand="block"
+      fill="clear"
+      size="small"
+      class="clear-btn"
+      @click="clearFilter"
+    >
+      Clear distance filter
+    </ion-button>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 import {
   IonButton,
-  IonItem,
-  IonLabel,
   IonNote,
-  IonRange,
-  IonToggle,
+  IonSelect,
+  IonSelectOption,
 } from '@ionic/vue';
 
 import AddressAutocomplete from '@/components/AddressAutocomplete.vue';
-import { getCurrentCoordinates } from '@/common/services/locationTracking';
-import { currentUser } from '@/features/auth/services/auth';
-import { getCacheOwnerUid } from '@/common/services/responseCache';
 import {
-  hydrateGeoFilterFromPrefs,
-  saveGeoFilterPrefs,
+  getCurrentCoordinates,
+  getGeolocationErrorMessage,
+} from '@/common/services/locationTracking';
+import {
+  parseCityRegionFromAddress,
   type GeoFilterState,
 } from '@/features/listings/services/geoFilterStorage';
 import {
-  clampRadiusMiles,
-  MAX_RADIUS_MILES,
-  MIN_RADIUS_MILES,
+  normalizeRadiusMiles,
+  RADIUS_OPTIONS_MILES,
 } from '@/features/listings/utils/geoDistance';
 import { logGeoFilterInputChanged } from '@/features/listings/utils/geoDebugLog';
 import type { MeetupLocation } from '@/features/meetups/types/meetupLocation';
 import { isApiConfigured } from '@/utils/apiBaseUrl';
-import { reverseGeocodeCoordinates, isGoogleMapsConfigured } from '@/utils/googleMaps';
+import { reverseGeocodeCoordinates, reverseGeocodeCityRegion, isGoogleMapsConfigured } from '@/utils/googleMaps';
 
 const props = defineProps<{
   modelValue: GeoFilterState & { locating?: boolean };
+  /** When set, location/address picks use this radius (e.g. map view default 5 mi). */
+  defaultLocationRadiusMiles?: number | null;
 }>();
 
 const emit = defineEmits<{
@@ -107,8 +102,13 @@ const emit = defineEmits<{
 }>();
 
 const geoError = ref('');
+const locatingLocally = ref(false);
 const apiConfigured = isApiConfigured();
 let radiusDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+
+const isLocating = computed(
+  () => locatingLocally.value || Boolean(props.modelValue.locating),
+);
 
 const centerLabel = computed(() => {
   if (props.modelValue.label) {
@@ -136,56 +136,14 @@ const addressLocation = computed<MeetupLocation | null>(() => {
   };
 });
 
-function persist(state: GeoFilterState & { locating?: boolean }) {
-  const uid = currentUser.value?.uid ?? getCacheOwnerUid() ?? 'anonymous';
-  saveGeoFilterPrefs(uid, state);
-}
-
 function emitState(patch: Partial<GeoFilterState & { locating?: boolean }>) {
-  const next = { ...props.modelValue, ...patch };
+  const next = { ...props.modelValue, enabled: true, ...patch };
   emit('update:modelValue', next);
-  persist(next);
 }
 
-watch(
-  () => currentUser.value?.uid,
-  (uid) => {
-    if (!uid) {
-      return;
-    }
-    const hydrated = hydrateGeoFilterFromPrefs(uid, props.modelValue);
-    logGeoFilterInputChanged({ ...hydrated, locating: false }, 'hydrate', { uid });
-    emit('update:modelValue', { ...hydrated, locating: false });
-  },
-);
-
-async function onToggle(event: CustomEvent) {
-  const enabled = event.detail.checked;
-  geoError.value = '';
-
-  if (!enabled) {
-    const next = { ...props.modelValue, enabled: false, locating: false };
-    logGeoFilterInputChanged(next, 'toggle-off');
-    emitState({ enabled: false, locating: false });
-    emit('apply');
-    return;
-  }
-
-  const next = { ...props.modelValue, enabled: true };
-  logGeoFilterInputChanged(next, 'toggle-on');
-  emitState({ enabled: true });
-
-  if (props.modelValue.lat != null && props.modelValue.lng != null) {
-    emit('apply');
-    return;
-  }
-
-  await resolveCenterFromGeolocation();
-}
-
-function onRadiusInput(event: CustomEvent) {
-  const radiusMiles = clampRadiusMiles(Number(event.detail.value));
-  const next = { ...props.modelValue, radiusMiles };
+function onRadiusChange(event: CustomEvent) {
+  const radiusMiles = normalizeRadiusMiles(Number(event.detail.value));
+  const next = { ...props.modelValue, enabled: true, radiusMiles };
   logGeoFilterInputChanged(next, 'radius');
   emitState({ radiusMiles });
 
@@ -193,72 +151,110 @@ function onRadiusInput(event: CustomEvent) {
     clearTimeout(radiusDebounceTimer);
   }
   radiusDebounceTimer = setTimeout(() => {
-    if (props.modelValue.enabled && hasActiveCenter.value) {
+    if (hasActiveCenter.value) {
       emit('apply');
     }
   }, 300);
 }
 
-async function resolveCenterFromGeolocation() {
+function resolveLocationRadiusMiles(): number {
+  if (props.defaultLocationRadiusMiles != null) {
+    return normalizeRadiusMiles(props.defaultLocationRadiusMiles);
+  }
+
+  return props.modelValue.radiusMiles;
+}
+
+function resolveCenterFromGeolocation() {
+  locatingLocally.value = true;
   emitState({ locating: true });
   geoError.value = '';
 
-  try {
-    const coords = await getCurrentCoordinates();
-    let label = 'Your location';
+  const coordsPromise = getCurrentCoordinates();
 
-    if (isGoogleMapsConfigured()) {
-      try {
-        label = await reverseGeocodeCoordinates(coords.lat, coords.lng);
-      } catch {
-        // Keep generic label when reverse geocode fails.
+  void coordsPromise
+    .then(async (coords) => {
+      let label = 'Your location';
+      let city = '';
+      let region = '';
+
+      if (isGoogleMapsConfigured()) {
+        try {
+          label = await reverseGeocodeCoordinates(coords.lat, coords.lng);
+          const cityRegion = await reverseGeocodeCityRegion(coords.lat, coords.lng);
+          city = cityRegion.city ?? '';
+          region = cityRegion.region ?? '';
+        } catch {
+          // Keep generic label when reverse geocode fails.
+        }
       }
-    }
 
-    const next = {
-      ...props.modelValue,
-      lat: coords.lat,
-      lng: coords.lng,
-      label,
-      locating: false,
-    };
-    logGeoFilterInputChanged(next, 'geolocation');
-    emitState({
-      lat: coords.lat,
-      lng: coords.lng,
-      label,
-      locating: false,
+      const next = {
+        ...props.modelValue,
+        enabled: true,
+        lat: coords.lat,
+        lng: coords.lng,
+        label,
+        city,
+        region,
+        radiusMiles: resolveLocationRadiusMiles(),
+        locating: false,
+      };
+      logGeoFilterInputChanged(next, 'geolocation');
+      emitState({
+        lat: coords.lat,
+        lng: coords.lng,
+        label,
+        city,
+        region,
+        radiusMiles: resolveLocationRadiusMiles(),
+        locating: false,
+      });
+      emit('apply');
+    })
+    .catch((error: unknown) => {
+      geoError.value = getGeolocationErrorMessage(error);
+      emitState({ locating: false });
+    })
+    .finally(() => {
+      locatingLocally.value = false;
     });
-    emit('apply');
-  } catch (error) {
-    geoError.value =
-      error instanceof Error
-        ? error.message
-        : 'Location access denied. Search an address below.';
-    emitState({ locating: false });
-  }
 }
 
-async function useMyLocation() {
-  await resolveCenterFromGeolocation();
+function useMyLocation() {
+  resolveCenterFromGeolocation();
 }
 
 function onAddressSelected(location: MeetupLocation | null) {
   geoError.value = '';
 
   if (!location) {
-    const cleared = { ...props.modelValue, lat: null, lng: null, label: '' };
+    const cleared = {
+      ...props.modelValue,
+      enabled: true,
+      lat: null,
+      lng: null,
+      label: '',
+      city: '',
+      region: '',
+    };
     logGeoFilterInputChanged(cleared, 'address', { addressCleared: true });
-    emitState({ lat: null, lng: null, label: '' });
+    emitState({ lat: null, lng: null, label: '', city: '', region: '' });
     return;
   }
 
   const shortLabel = shortenAddressLabel(location.address);
+  const { city, region } = parseCityRegionFromAddress(location.address);
+  const radiusMiles = resolveLocationRadiusMiles();
   const next = {
     ...props.modelValue,
+    enabled: true,
     lat: location.lat,
     lng: location.lng,
     label: shortLabel,
+    city,
+    region,
+    radiusMiles,
     locating: false,
   };
   logGeoFilterInputChanged(next, 'address', {
@@ -268,6 +264,9 @@ function onAddressSelected(location: MeetupLocation | null) {
     lat: location.lat,
     lng: location.lng,
     label: shortLabel,
+    city,
+    region,
+    radiusMiles,
     locating: false,
   });
   emit('apply');
@@ -285,22 +284,26 @@ function clearFilter() {
   geoError.value = '';
   const next = {
     ...props.modelValue,
-    enabled: false,
+    enabled: true,
     lat: null,
     lng: null,
     label: '',
+    city: '',
+    region: '',
     locating: false,
   };
   logGeoFilterInputChanged(next, 'clear');
   emitState({
-    enabled: false,
     lat: null,
     lng: null,
     label: '',
+    city: '',
+    region: '',
     locating: false,
   });
   emit('apply');
 }
+
 </script>
 
 <style scoped>
@@ -308,39 +311,30 @@ function clearFilter() {
   width: 100%;
 }
 
-.toggle-row {
-  --padding-start: 0;
-  --inner-padding-end: 0;
-  --min-height: 2.25rem;
-  font-size: 0.88rem;
-}
-
 .center-label {
-  margin: 0.35rem 0 0.5rem;
+  margin: 0 0 0.5rem;
   font-size: 0.82rem;
   color: var(--ion-color-success-shade);
   line-height: 1.35;
 }
 
 .hint {
-  margin: 0.35rem 0 0.5rem;
+  margin: 0 0 0.5rem;
   font-size: 0.8rem;
   color: var(--ion-color-medium);
   line-height: 1.35;
-}
-
-.hint.warning {
-  color: var(--ion-color-warning-shade);
 }
 
 .radius-block {
   margin-top: 0.25rem;
 }
 
-.radius-label {
-  display: block;
-  font-size: 0.8rem;
-  color: var(--ion-color-medium);
+.radius-select {
+  width: 100%;
+  max-width: 100%;
+  --padding-start: 0;
+  --padding-end: 0;
+  font-size: 0.88rem;
 }
 
 .location-actions {

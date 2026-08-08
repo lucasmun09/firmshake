@@ -15,8 +15,16 @@ import { debugLog, serializeError } from '@/common/debug/debugLog';
 import TabsPage from '@/features/shell/views/TabsPage.vue';
 import { isLogsRoute, shouldSkipAuthReadyWait } from '@/router/logsRoute';
 import { updateDocumentTitle } from '@/router/pageTitle';
-import { resolveGuestRootPath, GUEST_BROWSE_PATH } from '@/router/rootRoute';
-import { normalizeRoutePath, shouldDeferPostAuthChecks } from '@/router/tabsRoute';
+import {
+  AUTHENTICATED_ROOT_PATH,
+  GUEST_BROWSE_PATH,
+  resolveRootDestination,
+} from '@/router/rootRoute';
+import {
+  isLeavingSettingsHub,
+  normalizeRoutePath,
+  shouldDeferPostAuthChecks,
+} from '@/router/tabsRoute';
 import { isMobileWeb } from '@/utils/platform';
 import type { User } from 'firebase/auth';
 
@@ -32,7 +40,11 @@ const routes: Array<RouteRecordRaw> = [
   {
     path: '/',
     name: 'Root',
-    redirect: () => resolveGuestRootPath(),
+    // Guard in beforeEach resolves auth-aware destination; no route redirect here
+    // (Vue Router applies record redirects before guards, which bypassed auth checks).
+    component: {
+      template: '<ion-page />',
+    },
   },
   {
     path: '/login',
@@ -103,6 +115,12 @@ const routes: Array<RouteRecordRaw> = [
         meta: { public: true, guestAccessible: true },
       },
       {
+        path: 'communities/create',
+        name: 'CreateCommunity',
+        component: () => import('@/features/communities/views/CreateCommunityPage.vue'),
+        meta: { requiresAuth: true },
+      },
+      {
         path: 'communities',
         name: 'Communities',
         component: () => import('@/features/communities/views/CommunitiesPage.vue'),
@@ -166,19 +184,21 @@ const routes: Array<RouteRecordRaw> = [
         component: () => import('@/features/profile/views/ProfilePage.vue'),
         meta: { requiresAuth: true, skipAuthFlow: true },
       },
+      {
+        path: 'blockedusers',
+        name: 'BlockedUsers',
+        component: () => import('@/features/profile/views/BlockedUsersPage.vue'),
+        meta: { requiresAuth: true },
+      },
     ],
   },
   {
     path: '/communities/create',
-    name: 'CreateCommunity',
-    component: () => import('@/features/communities/views/CreateCommunityPage.vue'),
-    meta: { requiresAuth: true },
+    redirect: '/tabs/communities/create',
   },
   {
     path: '/blockedusers',
-    name: 'BlockedUsers',
-    component: () => import('@/features/profile/views/BlockedUsersPage.vue'),
-    meta: { requiresAuth: true },
+    redirect: '/tabs/blockedusers',
   },
   {
     path: '/buying/listing/:id',
@@ -233,7 +253,6 @@ const router = createRouter({
 });
 
 const CHUNK_RELOAD_KEY = 'firmshake:chunk-reload';
-const BOOTSTRAP_RELOAD_KEY = 'firmshake:bootstrap-reload';
 
 function isStaleChunkLoadError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
@@ -245,6 +264,90 @@ function isStaleChunkLoadError(error: unknown): boolean {
 
 function resolveLoggedInUser() {
   return resolveSessionUser();
+}
+
+function isEntryRoute(to: RouteLocationNormalized): boolean {
+  const normalizedPath = normalizeRoutePath(to.path);
+  return normalizedPath === '/' || to.name === 'Welcome';
+}
+
+async function recoverSessionUserForEntryRoute(
+  to: RouteLocationNormalized,
+  seq: number,
+  logRouter: boolean,
+): Promise<User | null> {
+  if (!authReady.value && !shouldSkipAuthReadyWait(to)) {
+    if (logRouter) {
+      debugLog.info('auth', 'Router guard: waiting for auth on entry route', {
+        seq,
+        to: to.fullPath,
+      });
+    }
+    await ensureAuthInitialized(ROUTER_AUTH_READY_MAX_MS);
+  }
+
+  let sessionUser = resolveLoggedInUser();
+
+  if (!sessionUser && auth) {
+    try {
+      await auth.authStateReady();
+    } catch (err) {
+      debugLog.warn('auth', 'Router guard: authStateReady failed on entry route', {
+        seq,
+        to: to.fullPath,
+        error: serializeError(err),
+      });
+    }
+    sessionUser = resolveLoggedInUser();
+  }
+
+  return sessionUser;
+}
+
+async function resolveEntryRouteRedirect(
+  to: RouteLocationNormalized,
+  seq: number,
+  logRouter: boolean,
+): Promise<string | true | null> {
+  if (!isEntryRoute(to)) {
+    return null;
+  }
+
+  const normalizedPath = normalizeRoutePath(to.path);
+  const sessionUser = await recoverSessionUserForEntryRoute(to, seq, logRouter);
+
+  if (sessionUser) {
+    if (logRouter) {
+      debugLog.info('auth', 'Router guard: signed-in entry → browse', {
+        seq,
+        from: to.fullPath,
+      });
+    }
+    return AUTHENTICATED_ROOT_PATH;
+  }
+
+  if (to.name === 'Welcome' && isMobileWeb()) {
+    if (logRouter) {
+      debugLog.info('auth', 'Router guard: mobile guest leaving landing for browse', {
+        seq,
+        from: to.fullPath,
+      });
+    }
+    return GUEST_BROWSE_PATH;
+  }
+
+  if (normalizedPath === '/') {
+    const guestRoot = resolveRootDestination(false);
+    if (logRouter) {
+      debugLog.info('auth', 'Router guard: guest root redirect', {
+        seq,
+        destination: guestRoot,
+      });
+    }
+    return guestRoot;
+  }
+
+  return true;
 }
 
 function shouldLogRouterEvent(to: RouteLocationNormalized, from: RouteLocationNormalized): boolean {
@@ -327,29 +430,9 @@ router.beforeEach(async (to, from) => {
   const seq = ++routerGuardSeq;
   const logRouter = shouldLogRouterEvent(to, from);
 
-  const normalizedPath = normalizeRoutePath(to.path);
-
-  if (normalizedPath === '/') {
-    if (!authReady.value && !shouldSkipAuthReadyWait(to)) {
-      await ensureAuthInitialized(ROUTER_AUTH_READY_MAX_MS);
-    }
-
-    const rootUser = resolveLoggedInUser();
-    if (rootUser) {
-      if (logRouter) {
-        debugLog.info('auth', 'Router guard: signed-in root → browse', { seq });
-      }
-      return '/tabs/home';
-    }
-
-    const guestRoot = resolveGuestRootPath();
-    if (logRouter) {
-      debugLog.info('auth', 'Router guard: guest root redirect', {
-        seq,
-        destination: guestRoot,
-      });
-    }
-    return guestRoot;
+  const entryRedirect = await resolveEntryRouteRedirect(to, seq, logRouter);
+  if (entryRedirect !== null) {
+    return entryRedirect;
   }
 
   if (isLogsRoute(to)) {
@@ -383,7 +466,16 @@ router.beforeEach(async (to, from) => {
   let isLoggedIn = Boolean(sessionUser);
 
   if (requiresAuth && !isLoggedIn && auth) {
-    await auth.authStateReady();
+    try {
+      await auth.authStateReady();
+    } catch (err) {
+      debugLog.warn('auth', 'Router guard: authStateReady failed while recovering session', {
+        seq,
+        to: to.fullPath,
+        error: serializeError(err),
+      });
+    }
+
     sessionUser = resolveLoggedInUser();
     isLoggedIn = Boolean(sessionUser);
 
@@ -424,26 +516,6 @@ router.beforeEach(async (to, from) => {
     return { name: 'Login', query: { redirect: to.fullPath } };
   }
 
-  if (isLoggedIn && to.name === 'Welcome') {
-    if (logRouter) {
-      debugLog.info('auth', 'Router guard: signed-in user leaving landing', {
-        seq,
-        from: to.fullPath,
-      });
-    }
-    return '/tabs/home';
-  }
-
-  if (!isLoggedIn && to.name === 'Welcome' && isMobileWeb()) {
-    if (logRouter) {
-      debugLog.info('auth', 'Router guard: mobile guest leaving landing for browse', {
-        seq,
-        from: to.fullPath,
-      });
-    }
-    return GUEST_BROWSE_PATH;
-  }
-
   if (isPublic && isLoggedIn && (to.name === 'Login' || to.name === 'Register' || to.name === 'ForgotPassword')) {
     try {
       const { getUserProfile } = await import('@/common/services/users');
@@ -474,11 +546,13 @@ router.beforeEach(async (to, from) => {
   }
 
   const deferPostAuthChecks = shouldDeferPostAuthChecks(from, to);
+  const leavingSettingsHub = isLeavingSettingsHub(from, to);
 
   if (
     isLoggedIn
     && !isAuthFlow
     && !to.meta.skipAuthFlow
+    && !leavingSettingsHub
     && to.name !== 'MfaChallenge'
     && to.meta.passwordReset !== true
   ) {

@@ -28,7 +28,7 @@
     <p class="hint">
       Add {{ MIN_LISTING_PHOTOS }}–{{ MAX_LISTING_PHOTOS }} photos. At least one photo is required.
     </p>
-    <p v-if="!apiHealthy" class="api-hint">
+    <p v-if="showApiUnavailableHint" class="api-hint">
       {{ apiUnavailableMessage }}
     </p>
     <p v-if="busy" class="busy-label">Processing photos…</p>
@@ -78,6 +78,8 @@ import { isWebcamAvailable } from '@/utils/webcam';
 const props = defineProps<{
   modelValue: ListingPhotoItem[];
   apiHealthy: boolean;
+  /** When true, health check is in progress — hide the unavailable hint. */
+  apiChecking?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -98,6 +100,9 @@ const photos = computed({
 
 const atLimit = computed(() => photos.value.length >= MAX_LISTING_PHOTOS);
 const allowMultiple = computed(() => !isNative);
+const showApiUnavailableHint = computed(
+  () => !props.apiHealthy && !props.apiChecking,
+);
 
 onUnmounted(() => {
   revokeBlobPreviews(photos.value);

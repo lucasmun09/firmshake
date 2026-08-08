@@ -4,7 +4,9 @@ import {
   documentId,
   getDoc,
   getDocFromCache,
+  getDocFromServer,
   getDocs,
+  getDocsFromServer,
   onSnapshot,
   query,
   where,
@@ -28,7 +30,9 @@ import {
   ensureFirestoreAuth,
   isSessionExpiredError,
   SessionExpiredError,
+  withTransientFirestoreRetry,
 } from '@/common/services/firestoreAuth';
+import { auth } from '@/common/services/firebase';
 import { debugLog, serializeError } from '@/common/debug/debugLog';
 
 export { LISTINGS_PAGE_SIZE } from '@/features/listings/utils/listingMapper';
@@ -80,7 +84,7 @@ export async function loadMoreListings(
 
 export async function getListingById(
   id: string,
-  options?: { preferCache?: boolean },
+  options?: { preferCache?: boolean; preferServer?: boolean },
 ): Promise<Listing | null> {
   const listings = await getListingsByIds([id], options);
   return listings.get(id) ?? null;
@@ -90,15 +94,20 @@ const LISTING_BATCH_SIZE = 30;
 
 export async function getListingsByIds(
   ids: string[],
-  options?: { preferCache?: boolean },
+  options?: { preferCache?: boolean; preferServer?: boolean },
 ): Promise<Map<string, Listing>> {
   const result = new Map<string, Listing>();
   if (!db || ids.length === 0) {
+    debugLog.warn('listing', 'getListingsByIds skipped: missing db or empty ids', {
+      hasDb: Boolean(db),
+      idCount: ids.length,
+    });
     return result;
   }
 
   const uniqueIds = [...new Set(ids)];
   const uncachedIds: string[] = [];
+  const negativeCacheIds: string[] = [];
 
   if (options?.preferCache) {
     for (const id of uniqueIds) {
@@ -108,6 +117,7 @@ export async function getListingsByIds(
           result.set(id, mapListing(cached.id, cached.data() as Record<string, unknown>));
         } else {
           uncachedIds.push(id);
+          negativeCacheIds.push(id);
         }
       } catch {
         uncachedIds.push(id);
@@ -118,30 +128,88 @@ export async function getListingsByIds(
   }
 
   if (uncachedIds.length === 0) {
+    debugLog.debug('listing', 'getListingsByIds satisfied from cache', {
+      ids: uniqueIds,
+      count: result.size,
+    });
     return result;
   }
 
-  const batches: string[][] = [];
-  for (let index = 0; index < uncachedIds.length; index += LISTING_BATCH_SIZE) {
-    batches.push(uncachedIds.slice(index, index + LISTING_BATCH_SIZE));
+  const firestore = db;
+  if (!firestore) {
+    return result;
   }
 
-  await Promise.all(
-    batches.map(async (batch) => {
-      const firestore = db;
-      if (!firestore) {
-        return;
-      }
+  const preferServer = options?.preferServer ?? false;
+  const readContext = 'getListingsByIds';
 
-      const snapshot = await getDocs(
-        query(collection(firestore, 'listings'), where(documentId(), 'in', batch)),
+  const readSingleListing = async (id: string) => {
+    const readDoc = preferServer || negativeCacheIds.includes(id) ? getDocFromServer : getDoc;
+    const snapshot = await readDoc(doc(firestore, 'listings', id));
+    if (snapshot.exists()) {
+      result.set(snapshot.id, mapListing(snapshot.id, snapshot.data() as Record<string, unknown>));
+      return;
+    }
+
+    debugLog.warn('listing', 'Listing document missing on Firestore read', {
+      id,
+      source: preferServer || negativeCacheIds.includes(id) ? 'server' : 'default',
+    });
+  };
+
+  const readListingBatch = async (batch: string[]) => {
+    const listingsQuery = query(collection(firestore, 'listings'), where(documentId(), 'in', batch));
+    const readQuery = preferServer || batch.some((id) => negativeCacheIds.includes(id))
+      ? getDocsFromServer
+      : getDocs;
+    const snapshot = await readQuery(listingsQuery);
+
+    for (const entry of snapshot.docs) {
+      result.set(entry.id, mapListing(entry.id, entry.data() as Record<string, unknown>));
+    }
+
+    for (const id of batch) {
+      if (!result.has(id)) {
+        debugLog.warn('listing', 'Listing document missing from batch Firestore read', {
+          id,
+          source: preferServer || negativeCacheIds.includes(id) ? 'server' : 'default',
+        });
+      }
+    }
+  };
+
+  try {
+    if (uncachedIds.length === 1) {
+      await withTransientFirestoreRetry(
+        () => readSingleListing(uncachedIds[0]!),
+        { user: auth?.currentUser ?? null, context: readContext },
       );
+      return result;
+    }
 
-      for (const entry of snapshot.docs) {
-        result.set(entry.id, mapListing(entry.id, entry.data() as Record<string, unknown>));
-      }
-    }),
-  );
+    const batches: string[][] = [];
+    for (let index = 0; index < uncachedIds.length; index += LISTING_BATCH_SIZE) {
+      batches.push(uncachedIds.slice(index, index + LISTING_BATCH_SIZE));
+    }
+
+    await Promise.all(
+      batches.map((batch) =>
+        withTransientFirestoreRetry(
+          () => readListingBatch(batch),
+          { user: auth?.currentUser ?? null, context: readContext },
+        ),
+      ),
+    );
+  } catch (error) {
+    debugLog.error('listing', 'getListingsByIds failed', {
+      ids: uncachedIds,
+      preferCache: options?.preferCache ?? false,
+      preferServer,
+      negativeCacheIds,
+      error: serializeError(error),
+    });
+    throw error;
+  }
 
   return result;
 }

@@ -1,4 +1,7 @@
-import { matchesListingKeyword } from '@/features/listings/utils/listingMapper';
+import {
+  matchesListingSearchQuery,
+  sortListingsBySearchRelevance,
+} from '@/features/listings/utils/browseSearchRanking';
 import { haversineDistanceKm } from '@/features/listings/utils/geohash';
 import type { Listing } from '@/types';
 
@@ -38,7 +41,8 @@ export function applyBrowseFilters(
   const query = options.query?.trim();
 
   if (query) {
-    filtered = filtered.filter((listing) => matchesListingKeyword(listing, query));
+    filtered = filtered.filter((listing) => matchesListingSearchQuery(listing, query));
+    filtered = sortListingsBySearchRelevance(filtered, query);
   }
 
   return filterListingsByGeoCenter(filtered, options.geo ?? null);

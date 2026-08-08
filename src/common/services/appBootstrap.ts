@@ -8,6 +8,7 @@ import {
   ensureCommunitiesSeeded,
   fetchCommunities,
 } from '@/features/communities/services/communities';
+import { useBffBrowse } from '@/common/config/featureFlags';
 import { ensureCategoriesSeeded } from '@/features/listings/services/categories';
 import {
   handleFirestorePermissionDenied,
@@ -20,6 +21,8 @@ import {
   getStaleCached,
   setCached,
 } from '@/common/services/responseCache';
+import { clearBrowseLocalCacheIfUserChanged } from '@/features/listings/services/browseLocalStorageCache';
+import { clearGeoFilterPrefsIfUserChanged } from '@/features/listings/services/geoFilterStorage';
 import { scheduleTabPrefetch, stopTabFeedPrefetch } from '@/common/services/tabPrefetch';
 import { subscribeUserProfile } from '@/common/services/users';
 
@@ -87,16 +90,18 @@ async function runGuestBootstrap(): Promise<void> {
     communitiesReady.value = false;
   }
 
-  void ensureCategoriesSeeded().catch((error) => {
-    if (isSessionExpiredError(error)) {
-      return;
-    }
-    void handleFirestorePermissionDenied(error, 'ensureCategoriesSeeded').then((handled) => {
-      if (!handled) {
-        console.warn('Category seed failed', error);
+  if (!useBffBrowse()) {
+    void ensureCategoriesSeeded().catch((error) => {
+      if (isSessionExpiredError(error)) {
+        return;
       }
+      void handleFirestorePermissionDenied(error, 'ensureCategoriesSeeded').then((handled) => {
+        if (!handled) {
+          console.warn('Category seed failed', error);
+        }
+      });
     });
-  });
+  }
 
   await (hadCommunitiesCache ? refreshCommunitiesInBackground() : loadCommunities());
 }
@@ -114,6 +119,8 @@ export async function startAppBootstrap(uid: string): Promise<void> {
 
 async function runBootstrap(uid: string): Promise<void> {
   clearCacheIfUserChanged(uid);
+  clearBrowseLocalCacheIfUserChanged(uid);
+  clearGeoFilterPrefsIfUserChanged(uid);
 
   const hadCommunitiesCache = hydrateBootstrapFromCache(uid);
 
@@ -161,16 +168,18 @@ async function runBootstrap(uid: string): Promise<void> {
     ? refreshCommunitiesInBackground()
     : loadCommunities();
 
-  void ensureCategoriesSeeded().catch((error) => {
-    if (isSessionExpiredError(error)) {
-      return;
-    }
-    void handleFirestorePermissionDenied(error, 'ensureCategoriesSeeded').then((handled) => {
-      if (!handled) {
-        console.warn('Category seed failed', error);
+  if (!useBffBrowse()) {
+    void ensureCategoriesSeeded().catch((error) => {
+      if (isSessionExpiredError(error)) {
+        return;
       }
+      void handleFirestorePermissionDenied(error, 'ensureCategoriesSeeded').then((handled) => {
+        if (!handled) {
+          console.warn('Category seed failed', error);
+        }
+      });
     });
-  });
+  }
 
   await communitiesTask;
 

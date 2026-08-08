@@ -1,4 +1,4 @@
-import { describeWithMfaAuth } from '../support/helpers';
+import { browseListingRowSelector, describeWithMfaAuth } from '../support/helpers';
 
 describeWithMfaAuth('Listing detail — browse and view', () => {
   beforeEach(function beforeEachDetail() {
@@ -8,7 +8,7 @@ describeWithMfaAuth('Listing detail — browse and view', () => {
 
   it('opens listing detail from browse feed when listings exist', () => {
     cy.visitApp('/tabs/home');
-    cy.get('ion-item[href*="/listing/"]', { timeout: 20_000 }).then(($items) => {
+    cy.get(browseListingRowSelector, { timeout: 20_000 }).then(($items) => {
       if ($items.length === 0) {
         cy.log('No listings in feed');
         return;
@@ -21,7 +21,7 @@ describeWithMfaAuth('Listing detail — browse and view', () => {
 
   it('shows listing metadata on detail page when feed has listings', () => {
     cy.visitApp('/tabs/home');
-    cy.get('ion-item[href*="/listing/"]', { timeout: 20_000 }).then(($items) => {
+    cy.get(browseListingRowSelector, { timeout: 20_000 }).then(($items) => {
       if ($items.length === 0) {
         cy.log('No listings in feed');
         return;
@@ -34,9 +34,38 @@ describeWithMfaAuth('Listing detail — browse and view', () => {
 });
 
 describe('Listing detail — auth guards', () => {
-  it('redirects unauthenticated users from listing detail', () => {
-    cy.visitApp('/listing/not-a-real-id');
-    cy.url().should('include', '/login');
+  it('allows guests to open listing detail when a listing exists', () => {
+    cy.visitApp('/tabs/home');
+    cy.get(browseListingRowSelector, { timeout: 20_000 }).then(($items) => {
+      if ($items.length === 0) {
+        cy.log('No listings in feed');
+        return;
+      }
+      cy.wrap($items.first()).click();
+      cy.url({ timeout: 15_000 }).should('match', /\/listing\//);
+      cy.url().should('not.include', '/login');
+    });
+  });
+
+  it('sets document title from listing name when a listing exists', () => {
+    cy.visitApp('/tabs/home');
+    cy.get(browseListingRowSelector, { timeout: 20_000 }).then(($items) => {
+      if ($items.length === 0) {
+        cy.log('No listings in feed');
+        return;
+      }
+
+      cy.wrap($items.first()).click();
+      cy.url({ timeout: 15_000 }).should('match', /\/listing\//);
+      cy.get('h1', { timeout: 15_000 })
+        .should('be.visible')
+        .invoke('text')
+        .then((listingTitle) => {
+          const trimmed = listingTitle.trim();
+          expect(trimmed.length).to.be.greaterThan(0);
+          cy.title().should('eq', `firm-shake - ${trimmed}`);
+        });
+    });
   });
 
   it('redirects unauthenticated users from edit route', () => {

@@ -2,6 +2,7 @@ import { GeoPoint, type DocumentData } from 'firebase/firestore';
 
 import { getDefaultCategoryId } from '@/features/listings/data/seedCategories';
 import { ALL_COMMUNITY_ID } from '@/features/communities/data/seedCommunities';
+import { matchesListingSearchQuery } from '@/features/listings/utils/browseSearchRanking';
 import type { Listing, ListingFeedEntry, ListingLocation } from '@/types';
 import { encodeGeohash } from '@/features/listings/utils/geohash';
 
@@ -170,12 +171,10 @@ export function feedEntryPayload(
   };
 }
 
-export function matchesListingKeyword(listing: Pick<Listing, 'title' | 'description'>, query: string): boolean {
-  const normalized = query.trim().toLowerCase();
-  if (!normalized) {
-    return true;
-  }
-
-  const haystack = `${listing.title} ${listing.description}`.toLowerCase();
-  return normalized.split(/\s+/).every((term) => haystack.includes(term));
+/** @deprecated Prefer matchesListingSearchQuery from browseSearchRanking. */
+export function matchesListingKeyword(
+  listing: Pick<Listing, 'title' | 'sellerName'>,
+  query: string,
+): boolean {
+  return matchesListingSearchQuery(listing, query);
 }

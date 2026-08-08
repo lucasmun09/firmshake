@@ -1,13 +1,10 @@
 <template>
   <ion-page>
-    <ion-header>
-      <ion-toolbar color="primary">
-        <ion-buttons slot="start">
-          <ion-back-button :default-href="backHref" />
-        </ion-buttons>
-        <ion-title>{{ isEditing ? 'Edit listing' : 'Sell on FirmShake' }}</ion-title>
-      </ion-toolbar>
-    </ion-header>
+    <AppTopToolbar
+      :title="pageTitle"
+      show-back-button
+      :back-href="backHref"
+    />
 
     <ion-content class="ion-padding">
       <AppContentFrame>
@@ -100,7 +97,11 @@
             </ion-select>
           </ion-item>
 
-          <ListingPhotoPicker v-model="photos" :api-healthy="apiHealthy" />
+          <ListingPhotoPicker
+            v-model="photos"
+            :api-healthy="apiHealthy === true"
+            :api-checking="apiChecking"
+          />
 
           <ion-button
             expand="block"
@@ -113,6 +114,8 @@
         </form>
       </AppContentFrame>
     </ion-content>
+
+    <AppBackendWaitModal :is-open="showBackendWaitModal" />
   </ion-page>
 </template>
 
@@ -120,12 +123,10 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { onIonViewWillEnter } from '@ionic/vue';
+import { useDebouncedVisibility } from '@/common/composables/useDebouncedVisibility';
 import {
-  IonBackButton,
   IonButton,
-  IonButtons,
   IonContent,
-  IonHeader,
   IonInput,
   IonItem,
   IonPage,
@@ -133,14 +134,14 @@ import {
   IonSelectOption,
   IonSpinner,
   IonTextarea,
-  IonTitle,
-  IonToolbar,
   toastController,
 } from '@ionic/vue';
 
 import { ALL_COMMUNITY_ID } from '@/features/communities/data/seedCommunities';
 import { getDefaultCategoryId } from '@/features/listings/data/seedCategories';
 import AppContentFrame from '@/components/AppContentFrame.vue';
+import AppBackendWaitModal from '@/components/AppBackendWaitModal.vue';
+import AppTopToolbar from '@/components/AppTopToolbar.vue';
 import ListingPhotoPicker from '@/features/listings/components/ListingPhotoPicker.vue';
 import { MIN_LISTING_PHOTOS } from '@/features/listings/constants/listingPhotos';
 import { checkApiHealth, getApiUnavailableMessage } from '@/common/services/api';
@@ -174,6 +175,10 @@ const listingId = computed(() =>
 );
 const isEditing = computed(() => route.name === 'EditListing' && Boolean(listingId.value));
 
+const pageTitle = computed(() =>
+  isEditing.value ? 'Edit listing' : 'Sell on FirmShake',
+);
+
 const backHref = computed(() =>
   isEditing.value ? `/listing/${listingId.value}` : '/tabs/home',
 );
@@ -193,7 +198,11 @@ const submitting = ref(false);
 const loadingListing = ref(false);
 const communities = bootstrapCommunities;
 const profile = bootstrapProfile;
-const apiHealthy = ref(false);
+/** null = health check not finished yet; false = API unreachable after check. */
+const apiHealthy = ref<boolean | null>(null);
+const backendWaiting = ref(false);
+const showBackendWaitModal = useDebouncedVisibility(backendWaiting, 2000);
+const apiChecking = computed(() => apiHealthy.value === null || backendWaiting.value);
 
 const postableCommunities = computed(() => {
   const joinedIds = new Set(profile.value?.communityIds ?? [ALL_COMMUNITY_ID]);
@@ -209,7 +218,7 @@ const canSubmit = computed(() => {
     title.value.trim().length > 0 &&
     description.value.trim().length > 0 &&
     photos.value.length >= MIN_LISTING_PHOTOS &&
-    apiHealthy.value
+    apiHealthy.value === true
   );
 });
 
@@ -251,9 +260,16 @@ function applyCommunityFromRoute() {
 }
 
 async function refreshPageData() {
-  apiHealthy.value = await checkApiHealth();
-  await waitForBootstrap();
-  categories.value = await fetchCategories();
+  backendWaiting.value = true;
+  apiHealthy.value = null;
+
+  try {
+    apiHealthy.value = await checkApiHealth();
+    await waitForBootstrap();
+    categories.value = await fetchCategories();
+  } finally {
+    backendWaiting.value = false;
+  }
 }
 
 async function useCurrentLocation() {
@@ -390,10 +406,11 @@ async function handleSubmit() {
   }
 
   submitting.value = true;
+  backendWaiting.value = true;
 
   try {
     apiHealthy.value = await checkApiHealth();
-    if (!apiHealthy.value) {
+    if (apiHealthy.value !== true) {
       throw new Error(getApiUnavailableMessage());
     }
 
@@ -456,6 +473,7 @@ async function handleSubmit() {
     });
     await toast.present();
   } finally {
+    backendWaiting.value = false;
     submitting.value = false;
   }
 }

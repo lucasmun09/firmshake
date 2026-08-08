@@ -17,7 +17,8 @@ describeWithMfaAuth('Browse — search, categories, communities', () => {
   });
 
   it('filters listings by search query', () => {
-    cy.get('ion-searchbar input').clear().type('test{enter}');
+    cy.get('ion-searchbar input').clear().type('test');
+    cy.get('.apply-filters-btn').click({ force: true });
     cy.get('ion-list, ion-content', { timeout: 15_000 }).should('exist');
   });
 
@@ -30,6 +31,7 @@ describeWithMfaAuth('Browse — search, categories, communities', () => {
     cy.get('.mobile-filter-nav-row').click();
     cy.get('.mobile-filter-panel__title').should('contain.text', 'Category');
     cy.get('.mobile-category-list ion-item').first().click({ force: true });
+    cy.get('.apply-filters-btn').click({ force: true });
 
     cy.get('.browse-sidebar--open').should('not.exist');
     cy.get('ion-list, ion-content', { timeout: 15_000 }).should('exist');
@@ -41,6 +43,7 @@ describeWithMfaAuth('Browse — search, categories, communities', () => {
     cy.get('ion-select.category-select').click({ force: true });
     cy.get('ion-popover', { timeout: 10_000 }).should('be.visible');
     cy.get('ion-select-option, ion-item').first().click({ force: true });
+    cy.get('.apply-filters-btn').click({ force: true });
     cy.get('ion-list, ion-content', { timeout: 15_000 }).should('exist');
   });
 
@@ -59,9 +62,10 @@ describeWithMfaAuth('Browse — search, categories, communities', () => {
   });
 });
 
-describe('Browse — unauthenticated redirect', () => {
-  it('requires login to browse listings', () => {
+describe('Browse — guest access', () => {
+  it('allows guests to browse listings at /tabs/home', () => {
     cy.visitApp('/tabs/home');
-    cy.url().should('include', '/login');
+    cy.url().should('include', '/tabs/home');
+    cy.get('ion-searchbar').should('be.visible');
   });
 });

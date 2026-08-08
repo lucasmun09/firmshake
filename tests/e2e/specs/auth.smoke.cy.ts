@@ -1,3 +1,5 @@
+import { expectLoginRedirect } from '../support/helpers';
+
 describe('Auth smoke — public routes', () => {
   it('redirects unauthenticated mobile web users from root to browse', () => {
     cy.visitApp('/');
@@ -39,8 +41,16 @@ describe('Auth smoke — public routes', () => {
 
   it('redirects protected routes to login with redirect query', () => {
     cy.visitApp('/tabs/sell');
-    cy.url().should('include', '/login');
-    cy.url().should('include', 'redirect');
+    expectLoginRedirect('/tabs/sell');
+  });
+
+  it('preserves redirect query for buying, inbox, and profile routes', () => {
+    const protectedPaths = ['/tabs/buying', '/tabs/inbox', '/tabs/profile'] as const;
+
+    for (const path of protectedPaths) {
+      cy.visitApp(path);
+      expectLoginRedirect(path);
+    }
   });
 
   it('loads MFA challenge page shell (public route)', () => {

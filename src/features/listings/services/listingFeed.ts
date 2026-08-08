@@ -2,6 +2,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   limit,
   orderBy,
@@ -53,6 +54,19 @@ function feedTargetsForListing(listing: Pick<Listing, 'communityIds'>): string[]
     ids.add(communityId);
   }
   return [...ids];
+}
+
+/** Resolve a feed cursor when an in-memory DocumentSnapshot was lost (e.g. session cache). */
+export async function getCommunityFeedDocSnapshot(
+  communityId: string,
+  listingId: string,
+): Promise<DocumentSnapshot | null> {
+  if (!db) {
+    return null;
+  }
+
+  const snapshot = await getDoc(doc(db, 'communityFeeds', communityId, 'listings', listingId));
+  return snapshot.exists() ? snapshot : null;
 }
 
 export async function fetchBrowsePage(

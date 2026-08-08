@@ -1,13 +1,6 @@
 <template>
   <ion-page>
-    <ion-header>
-      <ion-toolbar>
-        <ion-buttons slot="start">
-          <ion-back-button default-href="/tabs/profile" />
-        </ion-buttons>
-        <ion-title>Blocked Users</ion-title>
-      </ion-toolbar>
-    </ion-header>
+    <AppTopToolbar title="Blocked Users" show-back-button back-href="/tabs/profile" />
 
     <ion-content class="ion-padding">
       <AppContentFrame>
@@ -50,18 +43,13 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import {
   alertController,
-  IonBackButton,
   IonButton,
-  IonButtons,
   IonContent,
-  IonHeader,
   IonItem,
   IonLabel,
   IonList,
   IonPage,
   IonSpinner,
-  IonTitle,
-  IonToolbar,
   toastController,
 } from '@ionic/vue';
 
@@ -72,6 +60,7 @@ import {
   type BlockedUserEntry,
 } from '@/common/services/blocks';
 import AppContentFrame from '@/components/AppContentFrame.vue';
+import AppTopToolbar from '@/components/AppTopToolbar.vue';
 import UserAvatar from '@/components/UserAvatar.vue';
 import { currentUser } from '@/features/auth/services/auth';
 

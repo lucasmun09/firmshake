@@ -35,7 +35,20 @@ export async function getDedupedIdToken(user: User, forceRefresh = false): Promi
     !forceRefresh
     && Date.now() - lastIdTokenRefreshAt < ID_TOKEN_FORCE_REFRESH_COOLDOWN_MS
   ) {
-    return user.getIdToken(false);
+    const cooldownKey = `${user.uid}:cooldown`;
+    if (inFlightIdToken && inFlightIdTokenKey === cooldownKey) {
+      return inFlightIdToken;
+    }
+
+    inFlightIdTokenKey = cooldownKey;
+    inFlightIdToken = user.getIdToken(false).finally(() => {
+      if (inFlightIdTokenKey === cooldownKey) {
+        inFlightIdToken = null;
+        inFlightIdTokenKey = null;
+      }
+    });
+
+    return inFlightIdToken;
   }
 
   inFlightIdTokenKey = key;

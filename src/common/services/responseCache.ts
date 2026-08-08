@@ -242,6 +242,8 @@ export function clearCacheIfUserChanged(uid: string): void {
   if (owner && owner !== uid) {
     invalidateCachedNamespace('profile');
     invalidateCachedNamespace('browse-feed');
+    invalidateCachedNamespace('browse-search');
+    invalidateCachedNamespace('listing-search');
     invalidateCachedNamespace('tab-inbox-threads');
     invalidateCachedNamespace('tab-selling-listings');
   }

@@ -67,6 +67,10 @@ export function superAdminPassword(): string {
   return String(Cypress.env('SUPER_ADMIN_PASSWORD'));
 }
 
+/** Browse feed listings — cards (default) or list rows. */
+export const browseListingRowSelector =
+  '.browse-main .browse-card, .browse-main ion-item:not(.listing-row-skeleton)';
+
 /** Pathname from a Cypress URL (ignores redirect query params). */
 export function urlPathname(href: string): string {
   return new URL(href).pathname;
@@ -75,6 +79,14 @@ export function urlPathname(href: string): string {
 /** Whether the current path includes a route segment (not query string). */
 export function isOnPath(href: string, segment: string): boolean {
   return urlPathname(href).includes(segment);
+}
+
+/** Assert the current URL is login with a redirect query to the given path. */
+export function expectLoginRedirect(path: string): void {
+  cy.url().should('include', '/login');
+  cy.url().then((href) => {
+    expect(new URL(href).searchParams.get('redirect')).to.eq(path);
+  });
 }
 
 /** Find an Ionic input/textarea by its visible stacked label text (Ionic 8+). */
@@ -105,6 +117,11 @@ export function selectIonOption(selectLabel: string, optionText: string): void {
 /** Wait until auth bootstrap finishes and URL leaves login/register. */
 export function waitForAuthenticatedApp(): void {
   cy.url({ timeout: 30_000 }).should('not.match', /\/(login|register)$/);
+}
+
+/** Wait until guest browse shell is ready (auth resolved, browse toolbar visible). */
+export function waitForGuestBrowseReady(): void {
+  cy.contains('ion-header', 'Login/Create', { timeout: 15_000 }).should('be.visible');
 }
 
 /** Assert post-login destination: home or MFA enrollment (SMS not automated). */

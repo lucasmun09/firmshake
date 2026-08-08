@@ -100,3 +100,22 @@ export function useBffInbox(): boolean {
   }
   return false;
 }
+
+/**
+ * Browse search and categories via firmshake-api (`POST /api/v1/browse/search`,
+ * `GET /api/v1/categories`).
+ *
+ * Default when `VITE_USE_BFF_BROWSE` is unset:
+ * - **Enabled** when the API is configured (local dev proxy or `VITE_API_BASE_URL`).
+ * - Explicit `false` disables BFF browse and falls back to Firestore feed + legacy search.
+ */
+export function useBffBrowse(): boolean {
+  const explicit = parseEnvFlag(import.meta.env.VITE_USE_BFF_BROWSE);
+  if (explicit === true) {
+    return isApiConfigured();
+  }
+  if (explicit === false) {
+    return false;
+  }
+  return isApiConfigured();
+}

@@ -38,6 +38,8 @@ import './theme/google-maps.css';
 
 import { debugLog } from '@/common/debug/debugLog';
 import { initResponseCacheOnPageLoad, getCacheOwnerUid } from '@/common/services/responseCache';
+import { initBrowseLocalCacheOnPageLoad } from '@/features/listings/services/browseLocalStorageCache';
+import { initGeoFilterStorageOnPageLoad } from '@/features/listings/services/geoFilterStorage';
 import { hydrateBootstrapFromCache } from '@/common/services/appBootstrap';
 import { bootstrapDirectTabEntry } from '@/common/services/tabPrefetch';
 
@@ -52,6 +54,8 @@ function hasGoogleRedirectPending(): boolean {
 }
 
 initResponseCacheOnPageLoad();
+initBrowseLocalCacheOnPageLoad();
+initGeoFilterStorageOnPageLoad();
 const cacheOwnerUid = getCacheOwnerUid() ?? undefined;
 hydrateBootstrapFromCache(cacheOwnerUid);
 

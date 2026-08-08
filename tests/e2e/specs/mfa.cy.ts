@@ -1,14 +1,19 @@
-import { describeWithMfaAuth, fillIonInput, isOnPath } from '../support/helpers';
+import { describeWithMfaAuth, fillIonInput, urlPathname } from '../support/helpers';
 
 describe('MFA enrollment and challenge', () => {
   it('loads MFA enrollment page shell when visited directly (redirects if unauthenticated)', () => {
     cy.visitApp('/mfa-enroll');
+    cy.get('h1, ion-title', { timeout: 15_000 }).should(($titles) => {
+      const text = $titles.text();
+      expect(text.includes('Sign in') || text.includes('Verify phone number')).to.be.true;
+    });
     cy.url().then((href) => {
-      if (isOnPath(href, '/mfa-enroll')) {
+      const path = urlPathname(href);
+      if (path === '/mfa-enroll') {
         cy.contains('ion-title', 'Verify phone number').should('be.visible');
         cy.contains('Send verification code').should('be.visible');
       } else {
-        cy.url().should('include', '/login');
+        expect(path).to.eq('/login');
       }
     });
   });

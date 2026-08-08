@@ -1,11 +1,21 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Ref } from 'vue';
 
+import { shouldLoadMoreAtScroll } from '@/common/utils/scrollLoadThreshold';
+import {
+  incompleteRowSlots,
+  roundUpToMultiple,
+} from '@/features/listings/utils/browseGridLayout';
+
 type IonContentRef = Ref<{ $el?: { getScrollElement: () => Promise<HTMLElement> } } | null>;
 
 interface LazyRevealOptions {
   contentRef?: IonContentRef;
   loading?: Ref<boolean>;
   estimatedItemHeight?: number;
+  /** When set, batch sizes align to full grid rows (Browse cards). */
+  gridColumnCount?: Ref<number | undefined>;
+  gridRowCount?: Ref<number | undefined>;
+  gridRowHeightPx?: Ref<number | undefined>;
   minSkeletonMs?: number;
 }
 
@@ -18,12 +28,63 @@ export function useLazyReveal<T>(items: Ref<T[]>, options: LazyRevealOptions = {
   const estimatedItemHeight = options.estimatedItemHeight ?? 77;
   const minSkeletonMs = options.minSkeletonMs ?? DEFAULT_MIN_SKELETON_MS;
 
+  function gridColumns(): number {
+    const columns = options.gridColumnCount?.value;
+    return columns && columns > 0 ? columns : 0;
+  }
+
+  function gridRows(): number {
+    const rows = options.gridRowCount?.value;
+    return rows && rows > 0 ? rows : 0;
+  }
+
+  function gridPageSize(): number {
+    const columns = gridColumns();
+    const rows = gridRows();
+    if (columns <= 0 || rows <= 0) {
+      return 0;
+    }
+
+    return columns * rows;
+  }
+
   function updateItemsPerScreen() {
     const viewport = window.innerHeight || 640;
+    const pageSize = gridPageSize();
+
+    if (pageSize > 0) {
+      itemsPerScreen.value = pageSize;
+      return;
+    }
+
+    const columns = gridColumns();
+    if (columns > 0) {
+      const rowHeight = options.gridRowHeightPx?.value ?? estimatedItemHeight;
+      const rowsPerScreen = Math.max(1, Math.floor(viewport / rowHeight));
+      itemsPerScreen.value = columns * rowsPerScreen;
+      return;
+    }
+
     itemsPerScreen.value = Math.max(4, Math.ceil(viewport / estimatedItemHeight));
   }
 
-  const batchSize = computed(() => itemsPerScreen.value * 2);
+  const batchSize = computed(() => {
+    const pageSize = gridPageSize();
+    if (pageSize > 0) {
+      return pageSize;
+    }
+
+    return itemsPerScreen.value * 2;
+  });
+
+  const loadMoreStep = computed(() => {
+    const pageSize = gridPageSize();
+    if (pageSize > 0) {
+      return pageSize;
+    }
+
+    return itemsPerScreen.value;
+  });
   const skeletonCount = computed(() => batchSize.value);
 
   const loading = computed(() => options.loading?.value ?? false);
@@ -143,8 +204,34 @@ export function useLazyReveal<T>(items: Ref<T[]>, options: LazyRevealOptions = {
     if (showSkeletons.value || !hasMore.value) {
       return 0;
     }
-    return Math.min(itemsPerScreen.value, items.value.length - visibleCount.value);
+
+    const remaining = items.value.length - visibleCount.value;
+    const columns = gridColumns();
+    if (columns > 0) {
+      const incomplete = incompleteRowSlots(visibleCount.value, columns);
+      if (incomplete > 0) {
+        return Math.min(incomplete, remaining);
+      }
+
+      const pageSize = gridPageSize();
+      const previewRows = pageSize > 0 ? Math.max(1, Math.min(gridRows(), 2)) : 2;
+      return Math.min(columns * previewRows, remaining);
+    }
+
+    return Math.min(itemsPerScreen.value, remaining);
   });
+
+  function capVisibleCount(count: number): number {
+    const total = items.value.length;
+    const capped = Math.min(count, total);
+    const columns = gridColumns();
+
+    if (columns <= 0 || capped >= total) {
+      return capped;
+    }
+
+    return Math.min(roundUpToMultiple(capped, columns), total);
+  }
 
   function syncVisibleCount() {
     if (showSkeletons.value) {
@@ -153,13 +240,30 @@ export function useLazyReveal<T>(items: Ref<T[]>, options: LazyRevealOptions = {
     }
 
     updateItemsPerScreen();
-    visibleCount.value = Math.min(batchSize.value, items.value.length);
+    visibleCount.value = capVisibleCount(batchSize.value);
   }
 
-  watch(items, () => {
-    syncVisibleCount();
-    if (!showSkeletons.value && !loading.value && items.value.length > 0 && visibleCount.value === 0) {
-      visibleCount.value = Math.min(batchSize.value, items.value.length);
+  watch(items, (newItems, oldItems) => {
+    const previousLength = oldItems?.length ?? 0;
+
+    if (
+      !showSkeletons.value &&
+      newItems.length > previousLength &&
+      visibleCount.value >= previousLength
+    ) {
+      visibleCount.value = capVisibleCount(
+        visibleCount.value + (newItems.length - previousLength),
+      );
+    } else {
+      syncVisibleCount();
+      if (
+        !showSkeletons.value &&
+        !loading.value &&
+        newItems.length > 0 &&
+        visibleCount.value === 0
+      ) {
+        visibleCount.value = capVisibleCount(batchSize.value);
+      }
     }
   });
   watch(
@@ -193,10 +297,7 @@ export function useLazyReveal<T>(items: Ref<T[]>, options: LazyRevealOptions = {
       return;
     }
 
-    visibleCount.value = Math.min(
-      visibleCount.value + itemsPerScreen.value,
-      items.value.length,
-    );
+    visibleCount.value = capVisibleCount(visibleCount.value + loadMoreStep.value);
     scheduleScrollabilityMeasure();
   }
 
@@ -207,8 +308,7 @@ export function useLazyReveal<T>(items: Ref<T[]>, options: LazyRevealOptions = {
     }
 
     const scrollEl = await ionContent.$el.getScrollElement();
-    const remaining = scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight;
-    if (remaining < scrollEl.clientHeight * 0.75) {
+    if (shouldLoadMoreAtScroll(scrollEl)) {
       loadMore();
     }
   }
@@ -216,13 +316,24 @@ export function useLazyReveal<T>(items: Ref<T[]>, options: LazyRevealOptions = {
   function handleResize() {
     updateItemsPerScreen();
     if (!showSkeletons.value && visibleCount.value > 0) {
-      visibleCount.value = Math.min(
-        Math.max(visibleCount.value, batchSize.value),
-        items.value.length,
-      );
+      visibleCount.value = capVisibleCount(Math.max(visibleCount.value, batchSize.value));
     }
     scheduleScrollabilityMeasure();
   }
+
+  watch(
+    () => [
+      options.gridColumnCount?.value,
+      options.gridRowCount?.value,
+      options.gridRowHeightPx?.value,
+    ],
+    () => {
+      updateItemsPerScreen();
+      if (!showSkeletons.value && visibleCount.value > 0) {
+        visibleCount.value = capVisibleCount(Math.max(visibleCount.value, batchSize.value));
+      }
+    },
+  );
 
   watch(
     () => options.contentRef?.value,

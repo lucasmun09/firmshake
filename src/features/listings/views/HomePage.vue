@@ -16,11 +16,10 @@
               <ion-icon :icon="menuOutline" aria-hidden="true" />
             </button>
             <ion-searchbar
-              v-model="searchQuery"
+              v-model="draftSearchQuery"
               class="search-filter-row__search"
               placeholder="Search listings"
-              :debounce="350"
-              @ionInput="onSearchInput"
+              :debounce="0"
             />
           </div>
 
@@ -43,7 +42,7 @@
               fill="clear"
               class="add-community-btn"
               aria-label="Create community"
-              router-link="/communities/create"
+              router-link="/tabs/communities/create"
             >
               <ion-icon slot="icon-only" :icon="addOutline" />
             </ion-button>
@@ -79,18 +78,72 @@
               >
                 <template #root="{ push }">
                   <div class="sidebar-section">
+                    <h2 class="sidebar-heading">Distance</h2>
+                    <BrowseGeoFilter
+                      v-model="draftGeoFilter"
+                      :default-location-radius-miles="effectiveViewMode === 'map' ? BROWSE_MAP_DEFAULT_RADIUS_MILES : undefined"
+                      @apply="onGeoFilterApply"
+                    />
+                  </div>
+
+                  <div class="sidebar-section">
+                    <h2 class="sidebar-heading">View</h2>
+                    <BrowseViewSelector v-model="viewMode" :show-map="bffBrowseEnabled" />
+                  </div>
+
+                  <div class="sidebar-section">
                     <h2 class="sidebar-heading">Category</h2>
                     <MobileFilterNavRow
-                      :value="selectedCategoryLabel"
+                      :value="draftCategoryLabel"
                       aria-label="Choose category"
                       @click="push('category')"
                     />
                   </div>
 
                   <div class="sidebar-section">
-                    <h2 class="sidebar-heading">Distance</h2>
-                    <BrowseGeoFilter v-model="geoFilter" @apply="onGeoFilterApply" />
+                    <h2 class="sidebar-heading">Price</h2>
+                    <div class="price-filter-row">
+                      <ion-input
+                        v-model="draftPriceMin"
+                        type="number"
+                        inputmode="decimal"
+                        placeholder="Min"
+                        aria-label="Minimum price"
+                      />
+                      <span class="price-filter-sep">–</span>
+                      <ion-input
+                        v-model="draftPriceMax"
+                        type="number"
+                        inputmode="decimal"
+                        placeholder="Max"
+                        aria-label="Maximum price"
+                      />
+                    </div>
                   </div>
+
+                  <div class="sidebar-section">
+                    <h2 class="sidebar-heading">Sort</h2>
+                    <ion-select
+                      v-model="draftSort"
+                      interface="popover"
+                      class="sidebar-select"
+                      aria-label="Sort listings"
+                    >
+                      <ion-select-option value="newest">Newest</ion-select-option>
+                      <ion-select-option value="price_asc">Price: low to high</ion-select-option>
+                      <ion-select-option value="price_desc">Price: high to low</ion-select-option>
+                      <ion-select-option
+                        v-if="draftGeoFilter.lat != null"
+                        value="distance"
+                      >
+                        Distance
+                      </ion-select-option>
+                    </ion-select>
+                  </div>
+
+                  <ion-button expand="block" class="apply-filters-btn" @click="applyFiltersAndClose">
+                    Apply filters
+                  </ion-button>
                 </template>
 
                 <template #panel-category="{ pop, popAll }">
@@ -99,8 +152,8 @@
                       <ion-item
                         button
                         :detail="false"
-                        :class="{ 'mobile-category-list__item--selected': !selectedCategory }"
-                        @click="selectCategory('', popAll)"
+                        :class="{ 'mobile-category-list__item--selected': !draftCategory }"
+                        @click="selectDraftCategory('', popAll)"
                       >
                         <ion-label>All categories</ion-label>
                       </ion-item>
@@ -109,8 +162,8 @@
                         :key="category.id"
                         button
                         :detail="false"
-                        :class="{ 'mobile-category-list__item--selected': selectedCategory === category.id }"
-                        @click="selectCategory(category.id, popAll)"
+                        :class="{ 'mobile-category-list__item--selected': draftCategory === category.id }"
+                        @click="selectDraftCategory(category.id, popAll)"
                       >
                         <ion-label>{{ category.name }}</ion-label>
                       </ion-item>
@@ -121,13 +174,26 @@
 
               <template v-else>
                 <div class="sidebar-section">
+                  <h2 class="sidebar-heading">Distance</h2>
+                  <BrowseGeoFilter
+                    v-model="draftGeoFilter"
+                    :default-location-radius-miles="effectiveViewMode === 'map' ? BROWSE_MAP_DEFAULT_RADIUS_MILES : undefined"
+                    @apply="onGeoFilterApply"
+                  />
+                </div>
+
+                <div class="sidebar-section">
+                  <h2 class="sidebar-heading">View</h2>
+                  <BrowseViewSelector v-model="viewMode" :show-map="bffBrowseEnabled" />
+                </div>
+
+                <div class="sidebar-section">
                   <h2 class="sidebar-heading">Category</h2>
                   <ion-select
-                    v-model="selectedCategory"
+                    v-model="draftCategory"
                     interface="popover"
                     placeholder="All categories"
                     class="sidebar-select category-select"
-                    @ionChange="onCategoryChange"
                   >
                     <ion-select-option value="">All categories</ion-select-option>
                     <ion-select-option
@@ -141,14 +207,59 @@
                 </div>
 
                 <div class="sidebar-section">
-                  <h2 class="sidebar-heading">Distance</h2>
-                  <BrowseGeoFilter v-model="geoFilter" @apply="onGeoFilterApply" />
+                  <h2 class="sidebar-heading">Price</h2>
+                  <div class="price-filter-row">
+                    <ion-input
+                      v-model="draftPriceMin"
+                      type="number"
+                      inputmode="decimal"
+                      placeholder="Min"
+                      aria-label="Minimum price"
+                    />
+                    <span class="price-filter-sep">–</span>
+                    <ion-input
+                      v-model="draftPriceMax"
+                      type="number"
+                      inputmode="decimal"
+                      placeholder="Max"
+                      aria-label="Maximum price"
+                    />
+                  </div>
                 </div>
+
+                <div class="sidebar-section">
+                  <h2 class="sidebar-heading">Sort</h2>
+                  <ion-select
+                    v-model="draftSort"
+                    interface="popover"
+                    class="sidebar-select"
+                    aria-label="Sort listings"
+                  >
+                    <ion-select-option value="newest">Newest</ion-select-option>
+                    <ion-select-option value="price_asc">Price: low to high</ion-select-option>
+                    <ion-select-option value="price_desc">Price: high to low</ion-select-option>
+                    <ion-select-option
+                      v-if="draftGeoFilter.lat != null"
+                      value="distance"
+                    >
+                      Distance
+                    </ion-select-option>
+                  </ion-select>
+                </div>
+
+                <ion-button
+                  expand="block"
+                  class="apply-filters-btn"
+                  :disabled="!hasPendingFilterChanges && !loading"
+                  @click="applyFilters"
+                >
+                  Apply filters
+                </ion-button>
               </template>
             </aside>
           </Teleport>
 
-          <div class="browse-main">
+        <div ref="browseMainRef" class="browse-main">
         <GuestBrowsePromo v-if="showGuestPromo" />
 
         <div v-if="showTopSellButton" class="community-actions">
@@ -162,16 +273,40 @@
           <ion-button fill="outline" @click="reloadListings">Try again</ion-button>
         </div>
 
-        <ion-list v-else-if="showSkeletons">
-          <ListingRowSkeleton />
-        </ion-list>
+        <BrowseMapView
+          v-else-if="effectiveViewMode === 'map'"
+          v-model:address-query="mapAddressQuery"
+          :listings="mapListings"
+          :center="mapCenter"
+          :center-radius-miles="BROWSE_MAP_DEFAULT_RADIUS_MILES"
+          :loading="mapLoading"
+          @bounds-change="onMapBoundsChange"
+          @geo-search="onMapGeoSearch"
+          @listing-unavailable="onMapListingUnavailable"
+        />
+
+        <div
+          v-else-if="showResultsLoading"
+          class="results-loading"
+          aria-busy="true"
+          aria-live="polite"
+        >
+          <ion-spinner name="circular" />
+        </div>
 
         <div v-else-if="showNoListings" class="empty-state">
           <p>{{ noListingsMessage }}</p>
           <ion-note>{{ noListingsHint }}</ion-note>
         </div>
 
-        <ion-list v-else>
+        <div v-else-if="effectiveViewMode === 'cards'" class="browse-cards-wrap">
+          <BrowseCardsView
+            :listings="visibleItems"
+            :trailing-skeleton-count="combinedTrailingSkeletonCount"
+          />
+        </div>
+
+        <ion-list v-else-if="effectiveViewMode === 'list'">
           <ion-item
             v-for="listing in visibleItems"
             :key="listing.id"
@@ -192,16 +327,19 @@
           </ion-item>
 
           <ListingRowSkeleton
-            v-for="index in trailingSkeletonCount"
+            v-for="index in combinedTrailingSkeletonCount"
             :key="`trailing-${index}`"
           />
         </ion-list>
 
-        <div v-if="loadingMore" class="loading-more">
+        <div v-if="loadingMore && effectiveViewMode !== 'map'" class="loading-more">
           <ion-spinner name="crescent" />
         </div>
 
-        <div v-if="showEndOfList && !showNoListings" :class="showEmpty ? 'empty-state' : 'end-of-list'">
+        <div
+          v-if="showEndOfList && !showNoListings && effectiveViewMode !== 'map'"
+          :class="showEmpty ? 'empty-state' : 'end-of-list'"
+        >
           <p v-if="showEmpty">You have reached the bottom of the list!</p>
           <ion-note v-else>You have reached the bottom of the list!</ion-note>
         </div>
@@ -222,11 +360,12 @@
 
 <script setup lang="ts">
 import { formatPrice } from '@/utils/currency';
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
 import {
   IonButton,
   IonContent,
   IonIcon,
+  IonInput,
   IonItem,
   IonLabel,
   IonList,
@@ -244,12 +383,37 @@ import {
 import { addOutline, menuOutline } from 'ionicons/icons';
 import type { DocumentSnapshot } from 'firebase/firestore';
 
+import { useBffBrowse } from '@/common/config/featureFlags';
 import { getCommunityName } from '@/features/communities/services/communities';
 import {
   fetchCategories,
   getCategoryName,
   getStaleCategories,
-} from '@/features/listings/services/categories';
+} from '@/features/listings/services/categoriesRouter';
+import {
+  loadPersistedBrowseCommunity,
+  persistBrowseCommunity,
+} from '@/features/listings/services/browseCommunityStorage';
+import {
+  loadPersistedBrowseViewMode,
+  persistBrowseViewMode,
+} from '@/features/listings/services/browseViewModeStorage';
+import {
+  buildBrowseLocalAllKey,
+  buildBrowseLocalFilterKeyParams,
+  buildBrowseLocalMapKey,
+  getStaleBrowseLocalCache,
+  listingsFromCachePayload,
+  mergeFreshBrowseResultsOnTop,
+  persistBrowseLocalPool,
+  resolveBrowseLocalCacheKey,
+} from '@/features/listings/services/browseLocalStorageCache';
+import {
+  browseSearchCacheKey,
+  invalidateBrowseSearchCache,
+  searchBrowseListings,
+  type BrowseSort,
+} from '@/features/listings/services/browseSearch';
 import {
   bootstrapCommunities,
   bootstrapProfile,
@@ -259,7 +423,7 @@ import {
 } from '@/common/services/appBootstrap';
 import { currentUser } from '@/features/auth/services/auth';
 import { getCacheOwnerUid, getCached, getStaleCached } from '@/common/services/responseCache';
-import { fetchBrowsePage } from '@/features/listings/services/listingFeed';
+import { fetchBrowsePage, getCommunityFeedDocSnapshot } from '@/features/listings/services/listingFeed';
 import {
   browseFeedCacheKey,
   getCachedBrowsePage,
@@ -273,13 +437,34 @@ import {
   searchListings,
   type ListingSearchResult,
 } from '@/features/listings/services/listingSearch';
+import BrowseCardsView from '@/features/listings/components/BrowseCardsView.vue';
 import BrowseGeoFilter from '@/features/listings/components/BrowseGeoFilter.vue';
+import BrowseMapView from '@/features/listings/components/BrowseMapView.vue';
+import BrowseViewSelector from '@/features/listings/components/BrowseViewSelector.vue';
 import {
+  normalizeBrowseViewMode,
+  type BrowseViewMode,
+} from '@/features/listings/types/browseViewMode';
+import {
+  BROWSE_MAP_DEFAULT_RADIUS_MILES,
+  BROWSE_MAP_SEARCH_PAGE_SIZE,
+  type MapViewportSearch,
+  viewportFromCenterRadius,
+  type MapGeoSearchPayload,
+} from '@/features/listings/utils/browseMapView';
+import {
+  clearGeoFilterPrefsIfUserChanged,
   defaultGeoFilterState,
   hydrateGeoFilterFromPrefs,
+  saveGeoFilterPrefs,
   type GeoFilterState,
 } from '@/features/listings/services/geoFilterStorage';
 import { applyBrowseFilters as applyBrowseListingFilters } from '@/features/listings/utils/browseFilters';
+import {
+  appendUniqueBrowseListings,
+  filterLoadedBrowseListings,
+  type BrowseLocalFilterParams,
+} from '@/features/listings/utils/browseLocalSearch';
 import {
   buildGeoFilterInputPayload,
   logGeoFilterInputChanged,
@@ -296,6 +481,25 @@ import MobileFilterPanel from '@/components/MobileFilterPanel.vue';
 import ListingRowSkeleton from '@/components/skeletons/ListingRowSkeleton.vue';
 import GuestBrowsePromo from '@/features/shell/components/GuestBrowsePromo.vue';
 import { useLazyReveal } from '@/common/composables/useLazyReveal';
+import { shouldLoadMoreAtScroll } from '@/common/utils/scrollLoadThreshold';
+import {
+  appendBrowseListings,
+  combinedTrailingSkeletonCount as computeCombinedTrailingSkeletonCount,
+  feedPendingSkeletonCount as computeFeedPendingSkeletonCount,
+  isLoadMoreBlocked,
+  resolveBffBrowseHasMore,
+  resolveCachedBrowseHasMore,
+  resolveFirestoreFeedHasMore,
+  shouldShowBrowseEndOfList as computeShouldShowBrowseEndOfList,
+} from '@/features/listings/utils/browsePaginationUi';
+import {
+  applyBrowseSearchPageResult,
+  BROWSE_SEARCH_PREFETCH_PAGES,
+  BROWSE_TEXT_SEARCH_PAGE_SIZE,
+  nextBrowseSearchPagesToPrefetch,
+  shouldPrefetchBrowseSearchBuffer,
+  shouldShowBrowseLoadMoreSpinner,
+} from '@/features/listings/utils/browseSearchPrefetch';
 import { debugLog, serializeError } from '@/common/debug/debugLog';
 import {
   isFirestorePermissionDenied,
@@ -304,9 +508,38 @@ import {
 } from '@/common/services/firestoreAuth';
 import { ALL_COMMUNITY_ID } from '@/features/communities/data/seedCommunities';
 import type { Category, Listing } from '@/types';
+import {
+  getBrowseFeedPageSize,
+  getBrowseGridCellHeightPx,
+  getBrowseGridColumnCount,
+  getBrowseGridLayout,
+  getBrowseGridRowCount,
+  getBrowseGridRowHeightPx,
+} from '@/features/listings/utils/browseGridLayout';
+import { LISTINGS_PAGE_SIZE } from '@/features/listings/utils/listingMapper';
 
 function hydrateBrowsePlaceholder(communityId: string, categoryId: string) {
   const uid = currentUser.value?.uid ?? getCacheOwnerUid() ?? 'anonymous';
+  const localKey = buildBrowseLocalAllKey(uid, {
+    communityId,
+    categoryId: categoryId || undefined,
+  });
+  const localStale = getStaleBrowseLocalCache(localKey);
+  if (localStale?.orderedIds.length) {
+    const localListings = listingsFromCachePayload(localStale);
+    debugLog.debug('browse', 'LocalStorage hit — hydrating placeholder', {
+      cacheKey: localKey,
+      count: localListings.length,
+    });
+    return {
+      cacheKey: localKey,
+      listings: localListings,
+      lastDoc: null as DocumentSnapshot | null,
+      hasMore: resolveCachedBrowseHasMore(localStale.hasMore, localListings.length),
+      hasPlaceholder: true,
+    };
+  }
+
   const cacheKey = browseFeedCacheKey(uid, communityId, categoryId || undefined);
   const stale = getStaleBrowsePage(cacheKey) ?? getCachedBrowsePage(cacheKey);
   if (stale?.listings.length) {
@@ -318,7 +551,7 @@ function hydrateBrowsePlaceholder(communityId: string, categoryId: string) {
       cacheKey,
       listings: stale.listings,
       lastDoc: stale.lastDoc,
-      hasMore: stale.hasMore,
+      hasMore: resolveCachedBrowseHasMore(stale.hasMore, stale.listings.length),
       hasPlaceholder: true,
     };
   }
@@ -335,28 +568,112 @@ function hydrateBrowsePlaceholder(communityId: string, categoryId: string) {
 
 const initialBrowse = hydrateBrowsePlaceholder(ALL_COMMUNITY_ID, '');
 
-const initialGeoFilter = hydrateGeoFilterFromPrefs(
-  currentUser.value?.uid ?? getCacheOwnerUid() ?? 'anonymous',
-  defaultGeoFilterState(),
-);
+const initialGeoFilter = defaultGeoFilterState();
+
+const bffBrowseEnabled = useBffBrowse();
 
 const listings = ref<Listing[]>(initialBrowse.listings);
+const browseLoadedPool = ref<Listing[]>(initialBrowse.listings);
+const mapListings = ref<Listing[]>([]);
+const mapListingsPool = ref<Listing[]>([]);
+const mapLoading = ref(false);
+const mapBounds = ref<MapViewportSearch | null>(null);
 const categories = ref<Category[]>([]);
-const selectedCommunity = ref(ALL_COMMUNITY_ID);
-const selectedCategory = ref('');
-const searchQuery = ref('');
-const geoFilter = ref<GeoFilterState & { locating?: boolean }>(initialGeoFilter);
+const selectedCommunity = ref(loadPersistedBrowseCommunity());
+const draftSearchQuery = ref('');
+const draftCategory = ref('');
+const draftGeoFilter = ref<GeoFilterState & { locating?: boolean }>(initialGeoFilter);
+const mapAddressQuery = computed({
+  get: () => draftGeoFilter.value.label,
+  set: (value: string) => {
+    draftGeoFilter.value = {
+      ...draftGeoFilter.value,
+      label: value,
+    };
+  },
+});
+const draftPriceMin = ref('');
+const draftPriceMax = ref('');
+const draftSort = ref<BrowseSort>('newest');
+const appliedSearchQuery = ref('');
+const appliedCategory = ref('');
+const appliedGeoFilter = ref<GeoFilterState & { locating?: boolean }>({ ...initialGeoFilter });
+const appliedPriceMin = ref<number | null>(null);
+const appliedPriceMax = ref<number | null>(null);
+const appliedSort = ref<BrowseSort>('newest');
+const viewMode = ref<BrowseViewMode>(loadPersistedBrowseViewMode(bffBrowseEnabled));
+
+const effectiveViewMode = computed(() =>
+  normalizeBrowseViewMode(viewMode.value, bffBrowseEnabled),
+);
 const loading = ref(!initialBrowse.hasPlaceholder);
+const initialLoadPending = ref(!initialBrowse.hasPlaceholder);
+const filterApplying = ref(false);
 const refreshing = ref(false);
 const loadingMore = ref(false);
 const error = ref('');
 const hasMore = ref(initialBrowse.hasMore);
 const searchPage = ref(1);
-const lastFeedDoc = ref<DocumentSnapshot | null>(initialBrowse.lastDoc);
+// Firestore DocumentSnapshots must not be deeply reactive — Proxy breaks IDB persistence on startAfter.
+const lastFeedDoc = shallowRef<DocumentSnapshot | null>(initialBrowse.lastDoc);
 const contentRef = ref<InstanceType<typeof IonContent> | null>(null);
+const browseMainRef = ref<HTMLElement | null>(null);
 const bottomSentinelRef = ref<HTMLElement | null>(null);
+const gridColumnCount = ref(1);
+const gridRowCount = ref(3);
+const gridRowHeightPx = ref(200);
 const isScrollable = ref(false);
 const atBottom = ref(false);
+
+const cardsGridColumnCount = computed(() =>
+  effectiveViewMode.value === 'cards' ? gridColumnCount.value : undefined,
+);
+
+const browseFeedPageSize = computed(() =>
+  effectiveViewMode.value === 'cards'
+    ? getBrowseFeedPageSize(gridColumnCount.value, gridRowCount.value)
+    : LISTINGS_PAGE_SIZE,
+);
+
+async function updateBrowseGridLayout() {
+  const containerWidth = browseMainRef.value?.clientWidth ?? window.innerWidth;
+  const viewportWidth = window.innerWidth;
+  gridColumnCount.value = getBrowseGridColumnCount(containerWidth, viewportWidth);
+  gridRowHeightPx.value = getBrowseGridRowHeightPx(
+    containerWidth,
+    gridColumnCount.value,
+    viewportWidth,
+  );
+
+  const { gapPx } = getBrowseGridLayout(viewportWidth);
+  const cellHeightPx = getBrowseGridCellHeightPx(
+    containerWidth,
+    gridColumnCount.value,
+    viewportWidth,
+  );
+
+  let availableHeight = window.innerHeight * 0.55;
+  const ionContent = contentRef.value;
+  if (ionContent?.$el) {
+    try {
+      const scrollEl = await ionContent.$el.getScrollElement();
+      const cardsWrap = browseMainRef.value?.querySelector('.browse-cards-wrap');
+      if (cardsWrap) {
+        const scrollBottom = scrollEl.getBoundingClientRect().bottom;
+        const cardsTop = cardsWrap.getBoundingClientRect().top;
+        availableHeight = Math.max(cellHeightPx, scrollBottom - cardsTop);
+      } else {
+        availableHeight = scrollEl.clientHeight;
+      }
+    } catch {
+      // Keep fallback height when scroll host is unavailable.
+    }
+  }
+
+  gridRowCount.value = getBrowseGridRowCount(availableHeight, cellHeightPx, gapPx);
+}
+
+let browseGridResizeObserver: ResizeObserver | undefined;
 
 const MOBILE_SIDEBAR_QUERY = '(max-width: 767.98px)';
 
@@ -386,10 +703,17 @@ const selectedCommunityName = computed(
 );
 
 const selectedCategoryLabel = computed(() => {
-  if (!selectedCategory.value) {
+  if (!appliedCategory.value) {
     return 'All categories';
   }
-  return getCategoryName(categories.value, selectedCategory.value);
+  return getCategoryName(categories.value, appliedCategory.value);
+});
+
+const draftCategoryLabel = computed(() => {
+  if (!draftCategory.value) {
+    return 'All categories';
+  }
+  return getCategoryName(categories.value, draftCategory.value);
 });
 
 const sellLink = computed(() => ({
@@ -397,78 +721,455 @@ const sellLink = computed(() => ({
   query: { community: selectedCommunity.value },
 }));
 
-const isTextSearchMode = computed(() => searchQuery.value.trim().length > 0);
-
-const isGeoFilterActive = computed(
+const isAppliedGeoActive = computed(
   () =>
-    geoFilter.value.enabled &&
-    geoFilter.value.lat != null &&
-    geoFilter.value.lng != null,
+    appliedGeoFilter.value.lat != null &&
+    appliedGeoFilter.value.lng != null,
 );
 
-/** Text-only search uses the API; geo distance always filters the community feed locally. */
+const isTextSearchMode = computed(() => appliedSearchQuery.value.trim().length > 0);
+
+/** Legacy path: text-only search uses GET /api/listings/search; geo filters Firestore feed locally. */
 const isApiSearchMode = computed(
-  () => isTextSearchMode.value && !isGeoFilterActive.value,
+  () => !bffBrowseEnabled && isTextSearchMode.value && !isAppliedGeoActive.value,
 );
+
+const mapCenter = computed(() => {
+  if (!isAppliedGeoActive.value) {
+    return null;
+  }
+  return {
+    lat: appliedGeoFilter.value.lat!,
+    lng: appliedGeoFilter.value.lng!,
+  };
+});
+
+const hasPendingFilterChanges = computed(
+  () =>
+    draftSearchQuery.value !== appliedSearchQuery.value ||
+    draftCategory.value !== appliedCategory.value ||
+    draftSort.value !== appliedSort.value ||
+    draftPriceMin.value !== (appliedPriceMin.value?.toString() ?? '') ||
+    draftPriceMax.value !== (appliedPriceMax.value?.toString() ?? '') ||
+    draftGeoFilter.value.lat !== appliedGeoFilter.value.lat ||
+    draftGeoFilter.value.lng !== appliedGeoFilter.value.lng ||
+    draftGeoFilter.value.radiusMiles !== appliedGeoFilter.value.radiusMiles ||
+    draftGeoFilter.value.label !== appliedGeoFilter.value.label,
+);
+
+function parseOptionalPrice(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function syncDraftFromApplied() {
+  draftSearchQuery.value = appliedSearchQuery.value;
+  draftCategory.value = appliedCategory.value;
+  draftGeoFilter.value = { ...appliedGeoFilter.value };
+  draftPriceMin.value = appliedPriceMin.value?.toString() ?? '';
+  draftPriceMax.value = appliedPriceMax.value?.toString() ?? '';
+  draftSort.value = appliedSort.value;
+}
+
+function applyDraftToApplied() {
+  appliedSearchQuery.value = draftSearchQuery.value;
+  appliedCategory.value = draftCategory.value;
+  appliedGeoFilter.value = { ...draftGeoFilter.value };
+  appliedPriceMin.value = parseOptionalPrice(draftPriceMin.value);
+  appliedPriceMax.value = parseOptionalPrice(draftPriceMax.value);
+  appliedSort.value = draftSort.value;
+  persistAppliedGeoFilter();
+}
+
+function resetBrowseLoadedPool() {
+  browseLoadedPool.value = [];
+  mapListingsPool.value = [];
+}
+
+function buildLocalFilterParams(query = draftSearchQuery.value): BrowseLocalFilterParams {
+  return {
+    query,
+    categoryId: appliedCategory.value || undefined,
+    priceMin: appliedPriceMin.value,
+    priceMax: appliedPriceMax.value,
+    geo: isAppliedGeoActive.value
+      ? {
+          lat: appliedGeoFilter.value.lat!,
+          lng: appliedGeoFilter.value.lng!,
+          radiusKm: milesToKm(appliedGeoFilter.value.radiusMiles),
+        }
+      : null,
+    communityId: selectedCommunity.value,
+    sort: appliedSort.value,
+  };
+}
+
+function applyLocalSearchPreview() {
+  const draftQuery = draftSearchQuery.value.trim();
+  const appliedQuery = appliedSearchQuery.value.trim();
+  if (draftQuery === appliedQuery) {
+    return;
+  }
+
+  if (browseLoadedPool.value.length === 0 && mapListingsPool.value.length === 0) {
+    return;
+  }
+
+  const params = buildLocalFilterParams();
+  listings.value = filterLoadedBrowseListings(browseLoadedPool.value, params);
+  loading.value = false;
+
+  if (mapListingsPool.value.length > 0) {
+    mapListings.value = filterLoadedBrowseListings(mapListingsPool.value, params);
+  }
+}
+
+async function applyFilters() {
+  applyDraftToApplied();
+  filterApplying.value = true;
+  loading.value = true;
+  listings.value = [];
+  resetBrowseLoadedPool();
+  const startedAt = Date.now();
+
+  try {
+    invalidateCurrentListingCache();
+    await loadInitialListings({ skipStalePlaceholder: true });
+  } finally {
+    const remaining = Math.max(0, FILTER_APPLY_MIN_MS - (Date.now() - startedAt));
+    if (remaining > 0) {
+      await new Promise((resolve) => setTimeout(resolve, remaining));
+    }
+    filterApplying.value = false;
+  }
+}
+
+function applyFiltersAndClose() {
+  void applyFilters().then(() => closeSidebar());
+}
+
+function browseCacheUid(): string {
+  return currentUser.value?.uid ?? getCacheOwnerUid() ?? 'anonymous';
+}
+
+function persistAppliedGeoFilter(): void {
+  saveGeoFilterPrefs(browseCacheUid(), appliedGeoFilter.value);
+}
+
+function restoreGeoFilterFromPrefs(): GeoFilterState {
+  const uid = browseCacheUid();
+  clearGeoFilterPrefsIfUserChanged(uid);
+  return hydrateGeoFilterFromPrefs(uid);
+}
+
+function onGeoFilterDraftChange() {
+  if (draftGeoFilter.value.lat == null) {
+    return;
+  }
+  if (draftSort.value === 'distance' && draftGeoFilter.value.lat == null) {
+    draftSort.value = 'newest';
+  }
+}
+
+function onGeoFilterApply() {
+  onGeoFilterDraftChange();
+
+  if (draftGeoFilter.value.lat == null || draftGeoFilter.value.lng == null) {
+    appliedGeoFilter.value = {
+      ...appliedGeoFilter.value,
+      lat: null,
+      lng: null,
+      label: '',
+      city: '',
+      region: '',
+      locating: false,
+    };
+    persistAppliedGeoFilter();
+    return;
+  }
+
+  appliedGeoFilter.value = {
+    ...appliedGeoFilter.value,
+    lat: draftGeoFilter.value.lat,
+    lng: draftGeoFilter.value.lng,
+    label: draftGeoFilter.value.label,
+    city: draftGeoFilter.value.city,
+    region: draftGeoFilter.value.region,
+    radiusMiles: draftGeoFilter.value.radiusMiles,
+    locating: false,
+  };
+  persistAppliedGeoFilter();
+
+  if (effectiveViewMode.value !== 'map') {
+    return;
+  }
+
+  const viewport = viewportFromCenterRadius(
+    appliedGeoFilter.value.lat!,
+    appliedGeoFilter.value.lng!,
+    appliedGeoFilter.value.radiusMiles,
+  );
+  mapBounds.value = viewport;
+  void loadMapListings(viewport);
+}
+
+function onMapGeoSearch(payload: MapGeoSearchPayload) {
+  const nextGeo = {
+    ...draftGeoFilter.value,
+    enabled: true,
+    lat: payload.lat,
+    lng: payload.lng,
+    label: payload.label,
+    city: payload.city ?? draftGeoFilter.value.city,
+    region: payload.region ?? draftGeoFilter.value.region,
+    radiusMiles: payload.radiusMiles,
+    locating: false,
+  };
+  draftGeoFilter.value = nextGeo;
+  appliedGeoFilter.value = { ...nextGeo };
+  persistAppliedGeoFilter();
+
+  const viewport = viewportFromCenterRadius(payload.lat, payload.lng, payload.radiusMiles);
+  mapBounds.value = viewport;
+  void loadMapListings(viewport);
+}
+
+function selectDraftCategory(categoryId: string, popAll: () => void) {
+  draftCategory.value = categoryId;
+  popAll();
+}
 
 function currentBrowseCacheKey(): string {
   const uid = currentUser.value?.uid ?? getCacheOwnerUid() ?? 'anonymous';
-  return browseFeedCacheKey(uid, selectedCommunity.value, selectedCategory.value || undefined);
+  return browseFeedCacheKey(uid, selectedCommunity.value, appliedCategory.value || undefined);
+}
+
+function buildAppliedLocalCacheParams() {
+  return buildBrowseLocalFilterKeyParams({
+    communityId: selectedCommunity.value,
+    categoryId: appliedCategory.value || undefined,
+    q: appliedSearchQuery.value,
+    priceMin: appliedPriceMin.value,
+    priceMax: appliedPriceMax.value,
+    lat: appliedGeoFilter.value.lat,
+    lng: appliedGeoFilter.value.lng,
+    radiusMiles: appliedGeoFilter.value.radiusMiles,
+    sort: appliedSort.value,
+  });
+}
+
+function currentBrowseLocalCacheKey(): string {
+  const uid = currentUser.value?.uid ?? getCacheOwnerUid() ?? 'anonymous';
+  return resolveBrowseLocalCacheKey(uid, buildAppliedLocalCacheParams());
+}
+
+function persistCurrentBrowseLocalCache(pool = browseLoadedPool.value): void {
+  if (pool.length === 0) {
+    return;
+  }
+
+  persistBrowseLocalPool(currentBrowseLocalCacheKey(), pool, {
+    hasMore: hasMore.value,
+    searchPage: searchPage.value,
+    searchQuery: appliedSearchQuery.value.trim() || undefined,
+  });
+}
+
+function hydrateListingsFromLocalCache(): Listing[] | null {
+  const localStale = getStaleBrowseLocalCache(currentBrowseLocalCacheKey());
+  if (!localStale?.orderedIds.length) {
+    return null;
+  }
+
+  return listingsFromCachePayload(localStale);
 }
 
 function buildSearchParams(page = 1, forceRefresh?: boolean) {
+  const textSearchActive = appliedSearchQuery.value.trim().length > 0;
+  const pageSize = textSearchActive
+    ? Math.min(browseFeedPageSize.value, BROWSE_TEXT_SEARCH_PAGE_SIZE)
+    : browseFeedPageSize.value;
+
   const params = {
     communityId: selectedCommunity.value,
-    categoryId: selectedCategory.value || undefined,
+    categoryId: appliedCategory.value || undefined,
+    priceMin: appliedPriceMin.value ?? undefined,
+    priceMax: appliedPriceMax.value ?? undefined,
+    sort: appliedSort.value,
     page,
+    pageSize,
     forceRefresh,
   };
 
-  const query = searchQuery.value.trim();
+  const query = appliedSearchQuery.value.trim();
   if (query) {
     Object.assign(params, { q: query });
   }
 
-  if (isGeoFilterActive.value) {
+  if (isAppliedGeoActive.value) {
     Object.assign(params, {
-      lat: geoFilter.value.lat!,
-      lng: geoFilter.value.lng!,
-      radiusKm: milesToKm(geoFilter.value.radiusMiles),
+      lat: appliedGeoFilter.value.lat!,
+      lng: appliedGeoFilter.value.lng!,
+      ...(bffBrowseEnabled
+        ? { radiusMiles: appliedGeoFilter.value.radiusMiles }
+        : { radiusKm: milesToKm(appliedGeoFilter.value.radiusMiles) }),
     });
   }
 
   return params;
 }
 
+function buildMapSearchParams(viewport: MapViewportSearch, forceRefresh?: boolean) {
+  return {
+    ...buildSearchParams(1, forceRefresh),
+    lat: viewport.lat,
+    lng: viewport.lng,
+    radiusMiles: viewport.radiusMiles,
+    hasLocation: true,
+    page: 1,
+    pageSize: BROWSE_MAP_SEARCH_PAGE_SIZE,
+  };
+}
+
+let mapFetchGeneration = 0;
+
+async function loadMapListings(viewport: MapViewportSearch) {
+  if (!bffBrowseEnabled) {
+    return;
+  }
+
+  const generation = ++mapFetchGeneration;
+  const uid = currentUser.value?.uid ?? getCacheOwnerUid() ?? 'anonymous';
+  const mapCacheKey = buildBrowseLocalMapKey(uid, viewport);
+  const localStale = getStaleBrowseLocalCache(mapCacheKey);
+  let hadMapCache = false;
+
+  if (localStale?.orderedIds.length) {
+    hadMapCache = true;
+    const cached = listingsFromCachePayload(localStale);
+    mapListingsPool.value = cached;
+    mapListings.value = isTextSearchMode.value
+      ? filterLoadedBrowseListings(cached, buildLocalFilterParams(appliedSearchQuery.value))
+      : cached;
+    debugLog.debug('browse', 'Map localStorage hit — hydrating viewport', {
+      cacheKey: mapCacheKey,
+      count: cached.length,
+    });
+  }
+
+  mapLoading.value = true;
+
+  try {
+    const result = await withTransientFirestoreRetry(
+      () => searchBrowseListings(buildMapSearchParams(viewport, hadMapCache)),
+      { context: 'browse-map', user: currentUser.value },
+    );
+
+    if (generation !== mapFetchGeneration) {
+      return;
+    }
+
+    const merged = hadMapCache
+      ? mergeFreshBrowseResultsOnTop(result.listings, mapListingsPool.value)
+      : result.listings;
+    mapListingsPool.value = merged;
+    mapListings.value = isTextSearchMode.value
+      ? filterLoadedBrowseListings(merged, buildLocalFilterParams(appliedSearchQuery.value))
+      : merged;
+
+    persistBrowseLocalPool(mapCacheKey, merged, {
+      hasMore: result.hasMore,
+      viewport,
+    });
+
+    debugLog.debug('browse', 'Map viewport fetch complete', {
+      count: merged.length,
+      freshCount: result.listings.length,
+      radiusMiles: viewport.radiusMiles,
+      lat: viewport.lat,
+      lng: viewport.lng,
+      engine: result.engine,
+    });
+  } catch (err) {
+    if (generation !== mapFetchGeneration) {
+      return;
+    }
+
+    if (isSessionExpiredError(err)) {
+      return;
+    }
+
+    debugLog.warn('browse', 'Map viewport fetch failed', {
+      error: serializeError(err),
+      viewport,
+    });
+  } finally {
+    if (generation === mapFetchGeneration) {
+      mapLoading.value = false;
+    }
+  }
+}
+
+function onMapBoundsChange(viewport: MapViewportSearch) {
+  mapBounds.value = viewport;
+  if (effectiveViewMode.value !== 'map') {
+    return;
+  }
+  void loadMapListings(viewport);
+}
+
+function onMapListingUnavailable(listingId: string) {
+  mapListingsPool.value = mapListingsPool.value.filter((listing) => listing.id !== listingId);
+  mapListings.value = mapListings.value.filter((listing) => listing.id !== listingId);
+}
+
+function refreshMapListingsIfActive() {
+  if (effectiveViewMode.value !== 'map' || !mapBounds.value) {
+    return;
+  }
+  void loadMapListings(mapBounds.value);
+}
+
 function currentSearchCacheKey(page = 1) {
+  if (bffBrowseEnabled) {
+    return browseSearchCacheKey(buildSearchParams(page));
+  }
   return listingSearchCacheKey(buildSearchParams(page));
 }
 
 function applyBrowseFilters(listingsToFilter: Listing[], logSource?: 'local-feed' | 'cache-stale'): Listing[] {
+  if (bffBrowseEnabled) {
+    return listingsToFilter;
+  }
+
   const filtered = applyBrowseListingFilters(listingsToFilter, {
-    query: searchQuery.value,
-    geo: isGeoFilterActive.value
+    query: appliedSearchQuery.value,
+    geo: isAppliedGeoActive.value
       ? {
-          lat: geoFilter.value.lat!,
-          lng: geoFilter.value.lng!,
-          radiusKm: milesToKm(geoFilter.value.radiusMiles),
+          lat: appliedGeoFilter.value.lat!,
+          lng: appliedGeoFilter.value.lng!,
+          radiusKm: milesToKm(appliedGeoFilter.value.radiusMiles),
         }
       : null,
   });
 
-  if (isGeoFilterActive.value && logSource) {
+  if (isAppliedGeoActive.value && logSource) {
     logGeoFilterOutcome(
       listingsToFilter,
       filtered,
       {
         enabled: true,
-        lat: geoFilter.value.lat!,
-        lng: geoFilter.value.lng!,
-        radiusMiles: geoFilter.value.radiusMiles,
-        centerLabel: geoFilter.value.label || 'your location',
-        query: searchQuery.value.trim() || undefined,
+        lat: appliedGeoFilter.value.lat!,
+        lng: appliedGeoFilter.value.lng!,
+        radiusMiles: appliedGeoFilter.value.radiusMiles,
+        centerLabel: appliedGeoFilter.value.label || 'your location',
+        query: appliedSearchQuery.value.trim() || undefined,
         communityId: selectedCommunity.value,
-        categoryId: selectedCategory.value || null,
+        categoryId: appliedCategory.value || null,
       },
       logSource,
     );
@@ -482,18 +1183,71 @@ const {
   showSkeletons,
   trailingSkeletonCount,
   showEmpty,
+  allItemsRevealed,
   onScroll: onLazyScroll,
-} = useLazyReveal(listings, { contentRef, loading });
+} = useLazyReveal(listings, {
+  contentRef,
+  loading,
+  gridColumnCount: cardsGridColumnCount,
+  gridRowCount: computed(() =>
+    effectiveViewMode.value === 'cards' ? gridRowCount.value : undefined,
+  ),
+  gridRowHeightPx,
+});
 
-const showEndOfList = computed(
+const FILTER_APPLY_MIN_MS = 500;
+const INITIAL_LOAD_MIN_MS = 1000;
+
+let initialLoadCompleted = initialBrowse.hasPlaceholder;
+
+const showResultsLoading = computed(
   () =>
-    !error.value &&
-    !loading.value &&
-    !showSkeletons.value &&
-    !loadingMore.value &&
-    !hasMore.value &&
-    visibleItems.value.length >= listings.value.length &&
-    isScrollable.value,
+    showSkeletons.value ||
+    filterApplying.value ||
+    initialLoadPending.value ||
+    (loading.value && listings.value.length === 0),
+);
+
+const feedPendingSkeletonCount = computed(() =>
+  computeFeedPendingSkeletonCount({
+    loading: loading.value,
+    showSkeletons: showSkeletons.value,
+    loadingMore: loadingMore.value,
+    refreshing: refreshing.value,
+    feedHasMore: hasMore.value,
+    allItemsRevealed: allItemsRevealed.value,
+    trailingSkeletonCount: trailingSkeletonCount.value,
+    gridColumnCount:
+      effectiveViewMode.value === 'cards' ? gridColumnCount.value : undefined,
+    visibleListingCount: visibleItems.value.length,
+  }),
+);
+
+const combinedTrailingSkeletonCount = computed(() =>
+  computeCombinedTrailingSkeletonCount({
+    loading: loading.value,
+    showSkeletons: showSkeletons.value,
+    loadingMore: loadingMore.value,
+    refreshing: refreshing.value,
+    feedHasMore: hasMore.value,
+    allItemsRevealed: allItemsRevealed.value,
+    trailingSkeletonCount: trailingSkeletonCount.value,
+  }),
+);
+
+const showEndOfList = computed(() =>
+  computeShouldShowBrowseEndOfList({
+    error: Boolean(error.value),
+    loading: loading.value,
+    showResultsLoading: showResultsLoading.value,
+    loadingMore: loadingMore.value,
+    refreshing: refreshing.value,
+    initialLoadPending: initialLoadPending.value,
+    feedHasMore: hasMore.value,
+    allItemsRevealed: allItemsRevealed.value,
+    isScrollable: isScrollable.value,
+    atBottom: atBottom.value,
+  }),
 );
 
 const showGuestPromo = computed(() => !currentUser.value && isMobileSidebar.value);
@@ -502,14 +1256,14 @@ const showTopSellButton = computed(
   () =>
     Boolean(currentUser.value) &&
     !error.value &&
-    (loading.value || showSkeletons.value || !isScrollable.value),
+    (loading.value || showResultsLoading.value || !isScrollable.value),
 );
 const showBottomSellButton = computed(
   () =>
     Boolean(currentUser.value) &&
     !loading.value &&
     !error.value &&
-    !showSkeletons.value &&
+    !showResultsLoading.value &&
     isScrollable.value &&
     atBottom.value,
 );
@@ -518,22 +1272,22 @@ const showNoListings = computed(
   () =>
     !error.value &&
     !loading.value &&
-    !showSkeletons.value &&
+    !showResultsLoading.value &&
     !loadingMore.value &&
     listings.value.length === 0,
 );
 
 const noListingsMessage = computed(() => {
-  if (isGeoFilterActive.value) {
-    const center = geoFilter.value.label || 'your location';
-    return `No listings within ${geoFilter.value.radiusMiles} mi of ${center}.`;
+  if (isAppliedGeoActive.value) {
+    const center = appliedGeoFilter.value.label || 'your location';
+    return `No listings within ${appliedGeoFilter.value.radiusMiles} mi of ${center}.`;
   }
 
   return `No listings yet in ${selectedCommunityName.value}.`;
 });
 
 const noListingsHint = computed(() =>
-  isGeoFilterActive.value
+  isAppliedGeoActive.value
     ? 'Try increasing the radius or choosing a different location.'
     : 'Be the first to list something for sale.',
 );
@@ -544,104 +1298,233 @@ const showUpdatingIndicator = computed(
 
 let bottomObserver: IntersectionObserver | undefined;
 let loadMoreLock = false;
+const bffSearchPageFetches = new Map<number, Promise<boolean>>();
 
-async function loadInitialListings() {
+async function loadInitialListings(options?: {
+  skipStalePlaceholder?: boolean;
+  backgroundRefresh?: boolean;
+}) {
   const cacheKey = currentBrowseCacheKey();
+  const skipStalePlaceholder = options?.skipStalePlaceholder ?? false;
+  const backgroundRefresh = options?.backgroundRefresh ?? false;
+  const isInitialLoad = !initialLoadCompleted;
+  const initialLoadStartedAt = isInitialLoad ? Date.now() : null;
 
   error.value = '';
   searchPage.value = 1;
+  clearBffSearchPageFetches();
 
-  if (!isApiSearchMode.value) {
-    const stale = getStaleBrowsePage(cacheKey) ?? getCachedBrowsePage(cacheKey);
-    if (stale?.listings.length) {
-      listings.value = applyBrowseFilters(stale.listings, 'cache-stale');
-      lastFeedDoc.value = stale.lastDoc;
-      hasMore.value = stale.hasMore;
-      loading.value = false;
-      debugLog.debug('browse', 'Cache hit — showing stale placeholder', {
-        cacheKey,
-        count: stale.listings.length,
-      });
+  const useBffSearch = bffBrowseEnabled || isApiSearchMode.value;
+  const fetchGeneration = ++searchFetchGeneration;
+
+  if (useBffSearch) {
+    hasMore.value = false;
+  }
+
+  if (backgroundRefresh) {
+    refreshing.value = listings.value.length > 0;
+    if (!refreshing.value) {
+      loading.value = true;
+    }
+  } else if (!useBffSearch) {
+    if (!skipStalePlaceholder) {
+      const localListings = hydrateListingsFromLocalCache();
+      if (localListings?.length) {
+        listings.value = applyBrowseFilters(localListings, 'cache-stale');
+        if (!isTextSearchMode.value) {
+          browseLoadedPool.value = listings.value;
+        }
+        const localStale = getStaleBrowseLocalCache(currentBrowseLocalCacheKey());
+        hasMore.value = resolveCachedBrowseHasMore(
+          localStale?.hasMore ?? false,
+          localListings.length,
+          browseFeedPageSize.value,
+        );
+        loading.value = false;
+        debugLog.debug('browse', 'LocalStorage hit — showing stale feed placeholder', {
+          cacheKey: currentBrowseLocalCacheKey(),
+          count: localListings.length,
+        });
+      } else {
+        const stale = getStaleBrowsePage(cacheKey) ?? getCachedBrowsePage(cacheKey);
+        if (stale?.listings.length) {
+          listings.value = applyBrowseFilters(stale.listings, 'cache-stale');
+          if (!isTextSearchMode.value) {
+            browseLoadedPool.value = listings.value;
+          }
+          lastFeedDoc.value = stale.lastDoc;
+          hasMore.value = resolveCachedBrowseHasMore(
+            stale.hasMore,
+            stale.listings.length,
+            browseFeedPageSize.value,
+          );
+          loading.value = false;
+          debugLog.debug('browse', 'Cache hit — showing stale placeholder', {
+            cacheKey,
+            count: stale.listings.length,
+          });
+        } else {
+          debugLog.debug('browse', 'Cache miss — showing skeleton', { cacheKey });
+          loading.value = true;
+          listings.value = [];
+          lastFeedDoc.value = null;
+          hasMore.value = false;
+        }
+      }
     } else {
-      debugLog.debug('browse', 'Cache miss — showing skeleton', { cacheKey });
       loading.value = true;
       listings.value = [];
       lastFeedDoc.value = null;
       hasMore.value = false;
     }
-  } else {
-    const searchKey = currentSearchCacheKey(1);
-    const stale =
-      getStaleCached<ListingSearchResult>(searchKey) ??
-      getCached<ListingSearchResult>(searchKey);
-    if (stale?.listings.length) {
-      listings.value = stale.listings;
-      hasMore.value = stale.hasMore;
-      searchPage.value = stale.page;
+  } else if (!skipStalePlaceholder) {
+    const localListings = hydrateListingsFromLocalCache();
+    if (localListings?.length) {
+      listings.value = localListings;
+      browseLoadedPool.value = localListings;
+      const localStale = getStaleBrowseLocalCache(currentBrowseLocalCacheKey());
+      hasMore.value = resolveCachedBrowseHasMore(
+        localStale?.hasMore ?? false,
+        localListings.length,
+        browseFeedPageSize.value,
+      );
+      searchPage.value = localStale?.searchPage ?? 1;
       loading.value = false;
-      debugLog.debug('browse', 'Search cache hit — showing stale placeholder', {
-        searchKey,
-        count: stale.listings.length,
+      debugLog.debug('browse', 'LocalStorage hit — showing stale placeholder', {
+        cacheKey: currentBrowseLocalCacheKey(),
+        count: localListings.length,
       });
     } else {
-      loading.value = true;
-      listings.value = [];
-      hasMore.value = false;
+      const searchKey = currentSearchCacheKey(1);
+      const stale =
+        getStaleCached<ListingSearchResult>(searchKey) ??
+        getCached<ListingSearchResult>(searchKey);
+      if (stale?.listings.length) {
+        listings.value = stale.listings;
+        browseLoadedPool.value = stale.listings;
+        hasMore.value = resolveCachedBrowseHasMore(
+          stale.hasMore,
+          stale.listings.length,
+          browseFeedPageSize.value,
+        );
+        searchPage.value = stale.page;
+        loading.value = false;
+        debugLog.debug('browse', 'Search cache hit — showing stale placeholder', {
+          searchKey,
+          count: stale.listings.length,
+        });
+      } else {
+        loading.value = true;
+        listings.value = [];
+        hasMore.value = false;
+      }
     }
+    lastFeedDoc.value = null;
+  } else {
+    loading.value = true;
+    listings.value = [];
+    hasMore.value = false;
     lastFeedDoc.value = null;
   }
 
-  const hadPlaceholder = listings.value.length > 0;
-  refreshing.value = hadPlaceholder;
+  const hadPlaceholder =
+    listings.value.length > 0 && (backgroundRefresh || !skipStalePlaceholder);
+  if (!backgroundRefresh) {
+    refreshing.value = hadPlaceholder;
+  }
   let keepLoadingAfterFailure = false;
 
   try {
     debugLog.debug('browse', 'Fetch start', {
       cacheKey,
       communityId: selectedCommunity.value,
-      categoryId: selectedCategory.value || null,
-      search: searchQuery.value.trim() || null,
+      categoryId: appliedCategory.value || null,
+      search: appliedSearchQuery.value.trim() || null,
       hadPlaceholder,
       placeholderCount: listings.value.length,
-      geo: isGeoFilterActive.value ? buildGeoFilterInputPayload(geoFilter.value) : null,
+      geo: isAppliedGeoActive.value ? buildGeoFilterInputPayload(appliedGeoFilter.value) : null,
+      bff: bffBrowseEnabled,
     });
 
-    await waitForBootstrap();
+    if (isInitialLoad) {
+      await waitForBootstrap();
+    }
 
-    if (isApiSearchMode.value) {
+    if (useBffSearch) {
+      const searchFn = bffBrowseEnabled ? searchBrowseListings : searchListings;
       const result = await withTransientFirestoreRetry(
-        () => searchListings(buildSearchParams(1, hadPlaceholder)),
+        () => searchFn(buildSearchParams(1, hadPlaceholder)),
         { context: 'browse-search', user: currentUser.value },
       );
-      listings.value = result.listings;
-      hasMore.value = result.hasMore;
+
+      if (fetchGeneration !== searchFetchGeneration) {
+        return;
+      }
+
+      const cachedBeforeFetch = hadPlaceholder ? [...listings.value] : [];
+      const merged = hadPlaceholder
+        ? mergeFreshBrowseResultsOnTop(result.listings, cachedBeforeFetch)
+        : result.listings;
+
+      listings.value = merged;
+      browseLoadedPool.value = merged;
+      hasMore.value = resolveBffBrowseHasMore(
+        result.hasMore,
+        merged.length,
+        browseFeedPageSize.value,
+      );
       searchPage.value = 1;
+      persistCurrentBrowseLocalCache(merged);
       debugLog.debug('browse', 'Search fetch complete', {
         cacheKey,
-        count: result.listings.length,
-        hasMore: result.hasMore,
+        count: merged.length,
+        freshCount: result.listings.length,
+        hasMore: hasMore.value,
+        apiHasMore: result.hasMore,
+        engine: 'engine' in result ? result.engine : undefined,
       });
+      logBrowsePagination('initial load complete (bff)', {
+        page: 1,
+        fetched: result.listings.length,
+        hasMore: hasMore.value,
+        engine: 'engine' in result ? result.engine : undefined,
+      });
+      if (hasMore.value && shouldPrefetchBrowseSearchBuffer(isTextSearchMode.value)) {
+        void prefetchBrowseSearchBuffer(fetchGeneration);
+      }
     } else {
       const page = await withTransientFirestoreRetry(
         () => fetchBrowsePage(selectedCommunity.value, {
-          categoryId: selectedCategory.value || undefined,
+          categoryId: appliedCategory.value || undefined,
+          pageSize: browseFeedPageSize.value,
         }),
-        { context: isGeoFilterActive.value ? 'browse-feed-geo' : 'browse-feed', user: currentUser.value },
+        { context: isAppliedGeoActive.value ? 'browse-feed-geo' : 'browse-feed', user: currentUser.value },
       );
       const filtered = applyBrowseFilters(page.listings, 'local-feed');
-      listings.value = filtered;
+      const merged = hadPlaceholder
+        ? mergeFreshBrowseResultsOnTop(filtered, listings.value)
+        : filtered;
+      listings.value = merged;
+      if (!isTextSearchMode.value) {
+        browseLoadedPool.value = merged;
+      }
       lastFeedDoc.value = page.lastDoc;
-      hasMore.value = isGeoFilterActive.value ? false : page.hasMore;
+      hasMore.value = resolveFirestoreFeedHasMore(
+        page.hasMore,
+        isAppliedGeoActive.value,
+        bffBrowseEnabled,
+      );
       setCachedBrowsePage(cacheKey, page);
+      persistCurrentBrowseLocalCache(merged);
       debugLog.debug(
         'browse',
-        isGeoFilterActive.value ? 'Geo filter fetch complete' : 'Fetch complete',
+        isAppliedGeoActive.value ? 'Geo filter fetch complete' : 'Fetch complete',
         {
           cacheKey,
           count: filtered.length,
           feedCount: page.listings.length,
           hasMore: hasMore.value,
-          geo: isGeoFilterActive.value ? buildGeoFilterInputPayload(geoFilter.value) : null,
+          geo: isAppliedGeoActive.value ? buildGeoFilterInputPayload(appliedGeoFilter.value) : null,
         },
       );
     }
@@ -677,8 +1560,8 @@ async function loadInitialListings() {
       debugLog.warn('browse', 'loadInitialListings failed', {
         cacheKey,
         communityId: selectedCommunity.value,
-        categoryId: selectedCategory.value || null,
-        search: searchQuery.value.trim() || null,
+        categoryId: appliedCategory.value || null,
+        search: appliedSearchQuery.value.trim() || null,
         error: serializeError(err),
       });
     }
@@ -687,6 +1570,19 @@ async function loadInitialListings() {
       loading.value = false;
     }
     refreshing.value = false;
+
+    if (isInitialLoad && !keepLoadingAfterFailure) {
+      initialLoadCompleted = true;
+      const elapsed = initialLoadStartedAt != null ? Date.now() - initialLoadStartedAt : 0;
+      const remaining = Math.max(0, INITIAL_LOAD_MIN_MS - elapsed);
+      if (remaining > 0) {
+        await new Promise((resolve) => setTimeout(resolve, remaining));
+      }
+      initialLoadPending.value = false;
+    }
+
+    refreshMapListingsIfActive();
+
     await nextTick(() => {
       void updateScrollState();
     });
@@ -694,45 +1590,313 @@ async function loadInitialListings() {
 }
 
 function invalidateCurrentListingCache() {
-  if (isApiSearchMode.value) {
-    invalidateListingSearchCache(currentSearchCacheKey(1));
+  if (bffBrowseEnabled || isApiSearchMode.value) {
+    if (bffBrowseEnabled) {
+      invalidateBrowseSearchCache(currentSearchCacheKey(1));
+    } else {
+      invalidateListingSearchCache(currentSearchCacheKey(1));
+    }
     return;
   }
 
   invalidateBrowseFeedCache(currentBrowseCacheKey());
 }
 
+async function resolveFeedPaginationCursor(): Promise<DocumentSnapshot | null> {
+  if (lastFeedDoc.value) {
+    return lastFeedDoc.value;
+  }
+
+  const lastListing = listings.value.at(-1);
+  if (!lastListing) {
+    return null;
+  }
+
+  const snapshot = await getCommunityFeedDocSnapshot(selectedCommunity.value, lastListing.id);
+  if (snapshot) {
+    lastFeedDoc.value = snapshot;
+  }
+
+  return snapshot;
+}
+
+function logBrowsePagination(
+  message: string,
+  data?: Record<string, unknown>,
+): void {
+  debugLog.debug('browse-pagination', message, data);
+  if (import.meta.env.DEV) {
+    console.debug('[browse-pagination]', message, data ?? '');
+  }
+}
+
+function logBrowsePaginationSkip(reason: string): void {
+  logBrowsePagination('loadMore skipped', { reason });
+}
+
+function clearBffSearchPageFetches(): void {
+  bffSearchPageFetches.clear();
+}
+
+async function fetchBffSearchPage(
+  page: number,
+  options: {
+    showLoadingMore: boolean;
+    generation?: number;
+  },
+): Promise<boolean> {
+  const inFlight = bffSearchPageFetches.get(page);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const promise = (async (): Promise<boolean> => {
+    if (options.generation != null && options.generation !== searchFetchGeneration) {
+      return false;
+    }
+
+    if (page <= searchPage.value) {
+      return true;
+    }
+
+    const listingCountBefore = listings.value.length;
+    const showSpinner = options.showLoadingMore && shouldShowBrowseLoadMoreSpinner(page);
+
+    if (showSpinner) {
+      loadingMore.value = true;
+    }
+
+    try {
+      const searchFn = bffBrowseEnabled ? searchBrowseListings : searchListings;
+      const result = await searchFn(buildSearchParams(page, true));
+      if (options.generation != null && options.generation !== searchFetchGeneration) {
+        return false;
+      }
+
+      const applied = applyBrowseSearchPageResult(
+        listings.value,
+        result,
+        browseFeedPageSize.value,
+      );
+      listings.value = applied.listings;
+      browseLoadedPool.value = appendUniqueBrowseListings(
+        browseLoadedPool.value,
+        result.listings,
+      );
+      hasMore.value = applied.hasMore;
+      searchPage.value = page;
+      persistCurrentBrowseLocalCache(browseLoadedPool.value);
+      invalidateCurrentListingCache();
+
+      logBrowsePagination(
+        showSpinner ? 'loadMore complete (bff)' : 'prefetch page complete (bff)',
+        {
+          page,
+          fetched: result.listings.length,
+          appended: applied.appendedCount,
+          total: applied.listings.length,
+          hasMore: hasMore.value,
+          prefetchBuffer: !showSpinner,
+          engine: 'engine' in result ? result.engine : undefined,
+        },
+      );
+
+      if (applied.appendedCount === 0 && listingCountBefore === applied.listings.length) {
+        logBrowsePagination('page fetch returned no new listings', { page });
+      }
+
+      return true;
+    } catch (err) {
+      debugLog.warn('browse', 'fetchBffSearchPage failed', {
+        page,
+        communityId: selectedCommunity.value,
+        error: serializeError(err),
+      });
+      logBrowsePagination('page fetch failed', {
+        page,
+        communityId: selectedCommunity.value,
+        error: serializeError(err),
+      });
+      return false;
+    } finally {
+      if (showSpinner) {
+        loadingMore.value = false;
+      }
+    }
+  })();
+
+  bffSearchPageFetches.set(page, promise);
+  try {
+    return await promise;
+  } finally {
+    if (bffSearchPageFetches.get(page) === promise) {
+      bffSearchPageFetches.delete(page);
+    }
+  }
+}
+
+async function prefetchBrowseSearchBuffer(generation: number): Promise<void> {
+  if (!(bffBrowseEnabled || isApiSearchMode.value)) {
+    return;
+  }
+
+  const pages = nextBrowseSearchPagesToPrefetch(
+    searchPage.value,
+    hasMore.value,
+    BROWSE_SEARCH_PREFETCH_PAGES,
+  );
+  if (pages.length === 0) {
+    return;
+  }
+
+  logBrowsePagination('prefetch buffer start', {
+    pages,
+    loadedPage: searchPage.value,
+    targetPages: BROWSE_SEARCH_PREFETCH_PAGES,
+  });
+
+  for (const page of pages) {
+    if (generation !== searchFetchGeneration) {
+      logBrowsePagination('prefetch buffer aborted — stale generation', { page, generation });
+      return;
+    }
+    if (!hasMore.value) {
+      break;
+    }
+
+    const loaded = await fetchBffSearchPage(page, {
+      showLoadingMore: false,
+      generation,
+    });
+    if (!loaded || !hasMore.value) {
+      break;
+    }
+  }
+
+  if (generation === searchFetchGeneration) {
+    logBrowsePagination('prefetch buffer complete', {
+      loadedPage: searchPage.value,
+      listingCount: listings.value.length,
+      hasMore: hasMore.value,
+    });
+    await nextTick(() => {
+      void updateScrollState();
+    });
+  }
+}
+
 async function loadMoreListings() {
-  if (!hasMore.value || loadingMore.value || loading.value || loadMoreLock) {
+  if (effectiveViewMode.value === 'map') {
+    logBrowsePaginationSkip('map-view');
+    return;
+  }
+
+  if (
+    isLoadMoreBlocked({
+      feedHasMore: hasMore.value,
+      loadingMore: loadingMore.value,
+      loading: loading.value,
+      refreshing: refreshing.value,
+      initialLoadPending: initialLoadPending.value,
+      filterApplying: filterApplying.value,
+      loadMoreLock,
+    })
+  ) {
+    if (!hasMore.value) {
+      logBrowsePaginationSkip('feedHasMore=false');
+    } else if (loadingMore.value) {
+      logBrowsePaginationSkip('loadingMore');
+    } else if (loading.value) {
+      logBrowsePaginationSkip('loading');
+    } else if (refreshing.value) {
+      logBrowsePaginationSkip('refreshing');
+    } else if (initialLoadPending.value) {
+      logBrowsePaginationSkip('initialLoadPending');
+    } else if (filterApplying.value) {
+      logBrowsePaginationSkip('filterApplying');
+    } else if (loadMoreLock) {
+      logBrowsePaginationSkip('loadMoreLock');
+    }
     return;
   }
 
   loadMoreLock = true;
-  loadingMore.value = true;
+  const listingCountBefore = listings.value.length;
+  const useBffSearch = bffBrowseEnabled || isApiSearchMode.value;
+  if (!useBffSearch) {
+    loadingMore.value = true;
+  }
 
   try {
-    if (isApiSearchMode.value) {
+    logBrowsePagination('loadMore start', {
+      path: useBffSearch ? 'bff' : 'firestore',
+      searchPage: searchPage.value,
+      listingCount: listingCountBefore,
+      hasMore: hasMore.value,
+      hasCursor: Boolean(lastFeedDoc.value),
+    });
+
+    if (useBffSearch) {
       const nextPage = searchPage.value + 1;
-      const result = await searchListings(buildSearchParams(nextPage, true));
-      listings.value = [...listings.value, ...result.listings];
-      hasMore.value = result.hasMore;
-      searchPage.value = nextPage;
-      invalidateCurrentListingCache();
-    } else if (lastFeedDoc.value) {
-      const page = await fetchBrowsePage(selectedCommunity.value, {
-        categoryId: selectedCategory.value || undefined,
-        startAfterDoc: lastFeedDoc.value,
+      await fetchBffSearchPage(nextPage, {
+        showLoadingMore: shouldShowBrowseLoadMoreSpinner(nextPage),
+        generation: searchFetchGeneration,
       });
-      listings.value = [...listings.value, ...page.listings];
+    } else {
+      const cursor = await resolveFeedPaginationCursor();
+      if (!cursor) {
+        debugLog.warn('browse', 'Pagination cursor missing — retrying feed from last listing', {
+          communityId: selectedCommunity.value,
+          listingCount: listings.value.length,
+          lastListingId: listings.value.at(-1)?.id ?? null,
+        });
+        logBrowsePagination('loadMore aborted — cursor missing', {
+          listingCount: listings.value.length,
+          lastListingId: listings.value.at(-1)?.id ?? null,
+        });
+        return;
+      }
+
+      const page = await fetchBrowsePage(selectedCommunity.value, {
+        categoryId: appliedCategory.value || undefined,
+        startAfterDoc: cursor,
+        pageSize: browseFeedPageSize.value,
+      });
+      const filtered = applyBrowseFilters(page.listings);
+      const appended = appendBrowseListings(listings.value, filtered);
+      listings.value = appended;
+      if (!isTextSearchMode.value) {
+        browseLoadedPool.value = appendUniqueBrowseListings(browseLoadedPool.value, filtered);
+      }
       lastFeedDoc.value = page.lastDoc;
       hasMore.value = page.hasMore;
+      persistCurrentBrowseLocalCache(listings.value);
       invalidateCurrentListingCache();
+      logBrowsePagination('loadMore complete (firestore)', {
+        fetched: filtered.length,
+        appended: appended.length - listingCountBefore,
+        total: appended.length,
+        hasMore: hasMore.value,
+        hasCursor: Boolean(page.lastDoc),
+      });
     }
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Failed to load more listings';
+    debugLog.warn('browse', 'loadMoreListings failed', {
+      communityId: selectedCommunity.value,
+      error: serializeError(err),
+    });
+    logBrowsePagination('loadMore failed', {
+      communityId: selectedCommunity.value,
+      error: serializeError(err),
+    });
   } finally {
-    loadingMore.value = false;
+    if (!useBffSearch) {
+      loadingMore.value = false;
+    }
     loadMoreLock = false;
+    await nextTick(() => {
+      void updateScrollState();
+    });
   }
 }
 
@@ -740,28 +1904,10 @@ function reloadListings() {
   void loadInitialListings();
 }
 
-function onCategoryChange() {
-  reloadListings();
-  closeSidebar();
-}
-
-function selectCategory(categoryId: string, popAll: () => void) {
-  selectedCategory.value = categoryId;
-  popAll();
-  reloadListings();
-  closeSidebar();
-}
-
-function onGeoFilterApply() {
-  if (geoFilter.value.enabled && geoFilter.value.lat == null) {
-    return;
-  }
-
-  logGeoFilterInputChanged(geoFilter.value, 'apply', {
-    communityId: selectedCommunity.value,
-    categoryId: selectedCategory.value || null,
-    search: searchQuery.value.trim() || null,
-  });
+function onCommunityChange(event: CustomEvent) {
+  selectedCommunity.value = event.detail.value;
+  persistBrowseCommunity(selectedCommunity.value);
+  resetBrowseLoadedPool();
   reloadListings();
 }
 
@@ -800,8 +1946,35 @@ function updateMobileChromeBottom() {
   });
 }
 
-function onSearchInput() {
-  reloadListings();
+const SEARCH_DEBOUNCE_MS = 250;
+let searchDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+let searchFetchGeneration = 0;
+
+async function applyDebouncedSearch() {
+  const trimmedDraft = draftSearchQuery.value.trim();
+  const trimmedApplied = appliedSearchQuery.value.trim();
+  if (trimmedDraft === trimmedApplied) {
+    return;
+  }
+
+  appliedSearchQuery.value = draftSearchQuery.value;
+  searchPage.value = 1;
+  hasMore.value = false;
+
+  const hasLocalPreview =
+    browseLoadedPool.value.length > 0 &&
+    (trimmedDraft.length > 0 || trimmedApplied.length > 0);
+
+  if (!hasLocalPreview && trimmedDraft.length > 0) {
+    listings.value = [];
+    loading.value = true;
+  }
+
+  invalidateCurrentListingCache();
+  await loadInitialListings({
+    skipStalePlaceholder: true,
+    backgroundRefresh: hasLocalPreview,
+  });
 }
 
 function sellActionsHeight(scrollEl: HTMLElement): number {
@@ -824,6 +1997,18 @@ async function updateScrollState() {
     scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - 16;
 
   setupBottomObserver();
+
+  if (
+    !isScrollable.value &&
+    hasMore.value &&
+    !loading.value &&
+    !loadingMore.value &&
+    listings.value.length > 0
+  ) {
+    void loadMoreListings();
+  } else if (hasMore.value && shouldLoadMoreAtScroll(scrollEl)) {
+    void loadMoreListings();
+  }
 }
 
 function setupBottomObserver() {
@@ -854,19 +2039,40 @@ function setupBottomObserver() {
 async function handleScroll() {
   await onLazyScroll();
 
-  if (!isScrollable.value) {
-    return;
-  }
-
   const ionContent = contentRef.value;
   if (!ionContent?.$el) {
     return;
   }
 
   const scrollEl = await ionContent.$el.getScrollElement();
+  const contentScrollHeight = scrollEl.scrollHeight - sellActionsHeight(scrollEl);
+  isScrollable.value = contentScrollHeight - scrollEl.clientHeight > 8;
   atBottom.value =
     scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - 16;
+
+  if (hasMore.value && shouldLoadMoreAtScroll(scrollEl)) {
+    void loadMoreListings();
+  }
 }
+
+watch(viewMode, (mode) => {
+  persistBrowseViewMode(mode);
+  if (normalizeBrowseViewMode(mode, bffBrowseEnabled) !== 'map') {
+    mapFetchGeneration += 1;
+    mapLoading.value = false;
+  }
+});
+
+watch(draftSearchQuery, () => {
+  applyLocalSearchPreview();
+
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer);
+  }
+  searchDebounceTimer = setTimeout(() => {
+    void applyDebouncedSearch();
+  }, SEARCH_DEBOUNCE_MS);
+});
 
 watch(sidebarOpen, (open) => {
   if (!isMobileSidebar.value) {
@@ -876,11 +2082,33 @@ watch(sidebarOpen, (open) => {
 });
 
 onMounted(() => {
-  const uid = currentUser.value?.uid ?? getCacheOwnerUid() ?? 'anonymous';
-  geoFilter.value = hydrateGeoFilterFromPrefs(uid, geoFilter.value);
+  const restoredGeo = restoreGeoFilterFromPrefs();
+  draftGeoFilter.value = restoredGeo;
+  appliedGeoFilter.value = { ...restoredGeo };
+  syncDraftFromApplied();
+
+  if (
+    restoredGeo.lat != null &&
+    restoredGeo.lng != null &&
+    effectiveViewMode.value === 'map'
+  ) {
+    mapBounds.value = viewportFromCenterRadius(
+      restoredGeo.lat,
+      restoredGeo.lng,
+      restoredGeo.radiusMiles,
+    );
+  }
+
   mobileSidebarMediaQuery = window.matchMedia(MOBILE_SIDEBAR_QUERY);
   syncMobileSidebarMode();
   mobileSidebarMediaQuery.addEventListener('change', syncMobileSidebarMode);
+
+  if (browseMainRef.value && typeof ResizeObserver !== 'undefined') {
+    browseGridResizeObserver = new ResizeObserver(() => {
+      void updateBrowseGridLayout();
+    });
+    browseGridResizeObserver.observe(browseMainRef.value);
+  }
 
   const staleCategories = getStaleCategories();
   if (staleCategories) {
@@ -897,14 +2125,19 @@ onMounted(() => {
       });
     });
 
-  void loadInitialListings().catch((err) => {
-    const message = err instanceof Error ? err.message : 'Failed to load listings';
-    error.value = message;
-    loading.value = false;
-    debugLog.warn('browse', 'HomePage mount failed', {
-      error: serializeError(err),
+  void (async () => {
+    await updateBrowseGridLayout();
+    await loadInitialListings().catch((err) => {
+      const message = err instanceof Error ? err.message : 'Failed to load listings';
+      error.value = message;
+      loading.value = false;
+      initialLoadPending.value = false;
+      initialLoadCompleted = true;
+      debugLog.warn('browse', 'HomePage mount failed', {
+        error: serializeError(err),
+      });
     });
-  });
+  })();
 
   window.addEventListener('resize', handleResize);
   void nextTick(() => {
@@ -914,7 +2147,7 @@ onMounted(() => {
 
 function handleResize() {
   syncMobileSidebarMode();
-  void updateScrollState();
+  void updateBrowseGridLayout().then(() => updateScrollState());
 }
 
 watch(browseCommunities, (communities) => {
@@ -923,26 +2156,33 @@ watch(browseCommunities, (communities) => {
   }
 });
 
-watch(selectedCommunity, () => {
-  reloadListings();
+watch(selectedCommunity, (communityId) => {
+  persistBrowseCommunity(communityId);
 });
 
 watch([showSkeletons, () => visibleItems.value.length, () => listings.value.length], () => {
   void nextTick(() => {
+    void updateBrowseGridLayout();
     void updateScrollState();
   });
 });
 
+watch(effectiveViewMode, (mode) => {
+  if (normalizeBrowseViewMode(mode, bffBrowseEnabled) === 'cards') {
+    void nextTick(() => updateBrowseGridLayout());
+  }
+});
+
 onUnmounted(() => {
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer);
+  }
   bottomObserver?.disconnect();
+  browseGridResizeObserver?.disconnect();
   window.removeEventListener('resize', handleResize);
   mobileSidebarMediaQuery?.removeEventListener('change', syncMobileSidebarMode);
   document.body.classList.remove('browse-sidebar-open');
 });
-
-function onCommunityChange(event: CustomEvent) {
-  selectedCommunity.value = event.detail.value;
-}
 
 function categoryLabel(listing: Listing): string {
   return getCategoryName(categories.value, listing.primaryCategoryId);
@@ -990,6 +2230,29 @@ function communityLabel(communityIds: string[]): string {
   --padding-start: 0;
   --padding-end: 0;
   font-size: 0.92rem;
+}
+
+.price-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.price-filter-row ion-input {
+  flex: 1;
+  min-width: 0;
+  --padding-start: 0.35rem;
+  --padding-end: 0.35rem;
+  font-size: 0.88rem;
+}
+
+.price-filter-sep {
+  color: var(--ion-color-medium);
+  font-size: 0.85rem;
+}
+
+.apply-filters-btn {
+  margin-top: 1rem;
 }
 
 .mobile-category-list {
@@ -1055,6 +2318,14 @@ function communityLabel(communityIds: string[]): string {
 
 .bottom-sentinel {
   height: 1px;
+}
+
+.results-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 12rem;
+  padding: 3rem 1rem;
 }
 
 .loading-more {
