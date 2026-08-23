@@ -91,13 +91,22 @@
       </ion-button>
 
       <ion-button
-        v-else-if="buyerAgreement.status === 'accepted'"
+        v-else-if="buyerAgreement.status === 'accepted' && paymentsEnabled"
         expand="block"
         class="meetup-cta"
         :disabled="busy || buyerInteractionDisabled"
         @click="$emit('pay-deposit', buyerAgreement.id)"
       >
         {{ busy ? 'Processing...' : `Pay $${buyerAgreement.depositAmount} deposit` }}
+      </ion-button>
+
+      <ion-button
+        v-else-if="buyerAgreement.status === 'accepted'"
+        expand="block"
+        class="meetup-cta"
+        disabled
+      >
+        Payments coming soon
       </ion-button>
 
       <ion-button
@@ -139,6 +148,7 @@ import {
   formatMeetupTime,
   getAgreementStatusLabel,
 } from '@/common/services/agreements';
+import { isPaymentsEnabled } from '@/common/config/featureFlags';
 import type { Agreement } from '@/types';
 
 const props = defineProps<{
@@ -149,6 +159,8 @@ const props = defineProps<{
   busy?: boolean;
   blockedPartnerId?: string | null;
 }>();
+
+const paymentsEnabled = isPaymentsEnabled();
 
 defineEmits<{
   accept: [agreementId: string];

@@ -6,7 +6,7 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content class="ion-padding">
+    <ion-content>
       <AppContentFrame>
         <p class="intro">
           Google sign-in does not share your full name with FirmShake. Please confirm

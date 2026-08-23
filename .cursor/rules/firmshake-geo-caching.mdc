@@ -1,0 +1,72 @@
+# FirmShake geo compute & caching
+
+Reference for distance calculations, map pin aggregation, and cache layers. Prefer extending these patterns over ad-hoc haversine in UI code.
+
+## Principle
+
+**Geo filtering, distance sort, and seller pin clustering belong in the BFF when possible.** The client renders precomputed results and memoizes immutable aggregates keyed by listing snapshots.
+
+## Where compute runs today
+
+| Workload | Primary location | Frequency |
+|---|---|---|
+| Geo radius filter + distance sort (browse) | **BFF** — Typesense `_geo_distance` / geo filter; Firestore fallback scans feed with haversine post-filter | Per search request (paginated) |
+| Map seller pin aggregation | **BFF** — always included in `POST /api/v1/browse/search` response as `pinGroups[]`; client fallback via `aggregateBrowseMapPins()` when absent (legacy) | Per browse search request |
+| Map viewport radius from bounds | **Client** — 4 haversine corner checks in `browseMapView.ts` | Per map bounds idle (~debounced) |
+| Legacy client geo filter/sort | **Client** — `browseFilters.ts`, `browseLocalSearch.ts` when `VITE_USE_BFF_BROWSE=false` | Per filter apply on loaded pool |
+| Meetup ETA / arrival | **BFF** — `services/eta.py` | Per location ping |
+| Listing location jitter (privacy) | **Client** — deterministic offset, one haversine verify | Once per jitter call |
+
+## Bottlenecks at scale
+
+1. **Firestore browse fallback** — scans feed batches, haversine on every doc until page filled (`_collect_firestore_feed_page`). Typesense path avoids this; keep Typesense enabled in prod.
+2. **Client pin aggregation** — O(n²) worst case per seller cluster (small radius ≈ few comparisons). Memoized by listing snapshot key; server `pinGroups` removes client work on map fetches.
+3. **Repeated identical BFF searches** — map pan/zoom + tab refresh. Mitigated by in-process TTL cache on API (45s default).
+4. **Firestore reads vs compute** — haversine is cheap; **feed/document reads dominate**. Cache search responses (listings + pinGroups), not individual distance pairs.
+
+## Client caching
+
+| Key | Storage | TTL | Contents |
+|---|---|---|---|
+| `buildBrowseMapListingsCacheKey()` | In-memory LRU (32 entries) | Until listing coords/seller change | `BrowseMapPinGroup[]` from `aggregateBrowseMapPins()` (fallback only) |
+| `browseMapPinGroupsSyncKey()` | Ephemeral per render | N/A | Skip marker rebuild when pin groups unchanged |
+| `browse-search:*` | sessionStorage via `responseCache` | 5 min | Paginated search summaries + `pinGroups` (listingIds) |
+| `browse-local-map:*` | localStorage | 24 h | Map viewport listing pool |
+
+**Pin sync:** `BrowseMapView.syncMarkers()` compares `browseMapPinGroupsSyncKey` before rebuilding Google markers. Prefer `serverPinGroups` from the unified browse response; fall back to client aggregation when missing.
+
+## BFF caching
+
+| Key | Storage | TTL | Invalidation |
+|---|---|---|---|
+| `build_browse_search_cache_key(params, viewerUid)` | In-process dict per Cloud Run instance | **45s** (`BROWSE_SEARCH_CACHE_TTL_SECONDS`) | TTL expiry; listing writes do not invalidate (acceptable for browse) |
+| Typesense index | Managed | N/A | Listing pipeline upsert |
+
+Cached payload includes **listings + pinGroups** under the same SHA-256 key. **Multi-instance:** In-process cache is per warm instance only. For shared cache across Cloud Run replicas, add **Redis/Memorystore** with the same key from `browse_search_cache.py`.
+
+**Not recommended for browse POST:** Firestore as response cache, Cloud CDN on POST bodies.
+
+## API surface
+
+**`POST /api/v1/browse/search`** — single browse endpoint for list, cards, and map. Response shape:
+
+```json
+{
+  "listings": [...],
+  "pinGroups": [{ "key", "kind", "sellerId", "position", "listingIds" }],
+  "total": N,
+  "hasMore": bool,
+  "page": N,
+  "pageSize": N,
+  "engine": "typesense|firestore"
+}
+```
+
+Seller pin clustering (~0.02 mi, per seller) is computed server-side from the same result set. List/card views ignore `pinGroups`; map view passes them to `BrowseMapView` as `serverPinGroups`.
+
+## Future options
+
+- Precomputed **geohash buckets** on listing docs for Firestore geo queries without full-feed scan.
+- Phase 2 summary-only response (`POST /api/v1/browse/summary`) with the same `pinGroups` contract.
+
+Cross-reference **BFF browse search** in `firmshake-design.mdc` and **local-first caches** in `firmshake-local-first.mdc`.

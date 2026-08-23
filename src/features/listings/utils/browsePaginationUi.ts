@@ -46,6 +46,11 @@ export function feedPendingSkeletonCount(input: FeedPendingSkeletonInput): numbe
     return 0;
   }
 
+  // Cards grid: use the bottom load-more spinner instead of dark placeholder tiles.
+  if (input.gridColumnCount && input.gridColumnCount > 1) {
+    return 0;
+  }
+
   const incompleteRow =
     input.gridColumnCount && input.gridColumnCount > 1 && input.visibleListingCount != null
       ? incompleteRowSlots(input.visibleListingCount, input.gridColumnCount)

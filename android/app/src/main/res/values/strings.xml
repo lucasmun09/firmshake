@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">FirmShake</string>
+    <string name="title_activity_main">FirmShake</string>
+    <string name="package_name">com.firmshake.app</string>
+    <string name="custom_url_scheme">com.firmshake.app</string>
+</resources>

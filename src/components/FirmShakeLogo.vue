@@ -63,7 +63,7 @@ function onClick() {
 }
 
 .firmshake-logo--link:focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.85);
+  outline: 2px solid var(--fs-toolbar-contrast);
   outline-offset: 2px;
   border-radius: 8px;
 }

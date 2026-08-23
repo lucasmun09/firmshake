@@ -1,2 +1,35 @@
 /* For information on how to create your own theme, please refer to:
 http://ionicframework.com/docs/theming/ */
+
+/*
+ * FirmShake spacing tokens — see .cursor/rules/firmshake-spacing.mdc
+ */
+:root {
+  --fs-focus-outline-color: var(--ion-color-primary, #3880ff);
+  --fs-toolbar-contrast: var(--ion-color-primary-contrast, #fff);
+
+  --fs-space-xs: 0.35rem;
+  --fs-space-sm: 0.65rem;
+  --fs-space-md: 1rem;
+  --fs-space-lg: 1.25rem;
+  --fs-space-xl: 1.5rem;
+  --fs-space-2xl: 2rem;
+
+  --fs-page-inset-inline: var(--fs-space-md);
+  --fs-page-inset-block: var(--fs-space-md);
+  --fs-section-gap: var(--fs-space-lg);
+  --fs-card-gap: var(--fs-space-sm);
+  --fs-form-field-gap: var(--fs-space-md);
+  --fs-sidebar-inset: var(--fs-space-md);
+  --fs-toolbar-inset: var(--fs-space-sm);
+}
+
+@media (min-width: 768px) {
+  :root {
+    --fs-page-inset-inline: 1.15rem;
+    --fs-page-inset-block: 1.15rem;
+    --fs-sidebar-inset: 1.15rem;
+    --fs-toolbar-inset: 0.75rem;
+    --fs-card-gap: 0.85rem;
+  }
+}

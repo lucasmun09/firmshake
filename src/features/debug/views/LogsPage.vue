@@ -1,5 +1,5 @@
 <template>
-  <ion-page>
+  <ion-page class="logs-page">
     <ion-header>
       <ion-toolbar color="primary">
         <ion-buttons slot="start">
@@ -9,7 +9,7 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content ref="contentRef" class="ion-padding" @ionScroll="handleScroll">
+    <ion-content ref="contentRef" class="logs-content" @ionScroll="handleScroll">
       <AppContentFrame>
         <p class="intro">
           Logs are saved in this browser's local storage so they survive refresh. Opening this page
@@ -329,6 +329,9 @@ async function handleScroll(): Promise<void> {
 }
 
 onMounted(() => {
+  // Ensure boot shell is gone even when opened via the full app router.
+  document.getElementById('app-boot-shell')?.remove();
+
   unsubscribe = subscribeDebugLogs((next) => {
     void handleEntriesUpdate(next);
   });
@@ -442,10 +445,19 @@ function formatData(data: unknown): string {
 </script>
 
 <style scoped>
+/*
+ * Keep log copy readable in dark palette. Avoid relying solely on inherited
+ * ion-text tokens in case the page is painted before Ionic CSS vars settle.
+ */
+.logs-page {
+  --background: var(--ion-background-color, #ffffff);
+  color: var(--ion-text-color, #111111);
+}
+
 .intro,
 .meta,
 .empty {
-  color: var(--ion-color-medium);
+  color: var(--ion-color-medium, #92949c);
   line-height: 1.45;
 }
 
@@ -500,6 +512,7 @@ function formatData(data: unknown): string {
   text-transform: uppercase;
   font-size: 0.75rem;
   letter-spacing: 0.03em;
+  color: var(--ion-text-color, #111111);
 }
 
 .meta-tag {
@@ -521,6 +534,7 @@ function formatData(data: unknown): string {
 .message {
   margin: 0;
   font-size: 0.95rem;
+  color: var(--ion-text-color, #111111);
 }
 
 .message.collapsed {
@@ -533,8 +547,8 @@ function formatData(data: unknown): string {
   margin: 0.5rem 0 0;
   padding: 0.5rem;
   border-radius: 6px;
-  background: var(--ion-color-light);
-  color: var(--ion-color-dark);
+  background: var(--ion-color-light, #f4f5f8);
+  color: var(--ion-color-dark, #222428);
   font-size: 0.75rem;
   overflow-x: auto;
   max-height: 12rem;

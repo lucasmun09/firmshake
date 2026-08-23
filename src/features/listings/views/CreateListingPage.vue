@@ -6,7 +6,7 @@
       :back-href="backHref"
     />
 
-    <ion-content class="ion-padding">
+    <ion-content>
       <AppContentFrame>
         <div v-if="loadingListing" class="loading-state">
           <ion-spinner name="crescent" />

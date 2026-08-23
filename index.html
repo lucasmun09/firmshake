@@ -8,6 +8,24 @@
 
     <meta http-equiv="Cache-Control" content="no-cache" />
     <meta name="color-scheme" content="light dark" />
+
+    <script>
+      (function () {
+        var STORAGE_KEY = 'firmshake.themePreference';
+        var DARK_CLASS = 'ion-palette-dark';
+
+        try {
+          var preference = localStorage.getItem(STORAGE_KEY);
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var useDark = preference === 'dark' || ((preference === 'system' || preference !== 'light') && prefersDark);
+          if (useDark) {
+            document.documentElement.classList.add(DARK_CLASS);
+          }
+        } catch (error) {
+          /* ignore storage failures during boot */
+        }
+      })();
+    </script>
     <meta
       name="viewport"
       content="viewport-fit=cover, width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no"
@@ -133,6 +151,14 @@
               color: #ffffff;
             }
           }
+          html.ion-palette-dark #app-boot-shell {
+            --boot-bg: #000000;
+            --boot-surface: #1c1c1e;
+            --boot-muted: #98989d;
+            --boot-border: #38383a;
+            --boot-shimmer: #2c2c2e;
+            color: #ffffff;
+          }
           #app-boot-shell *,
           #app-boot-shell *::before,
           #app-boot-shell *::after {
@@ -240,6 +266,7 @@
         </main>
         <nav class="boot-tabs" aria-hidden="true">
           <div class="boot-tab"><div class="boot-tab-icon"></div><span>Browse</span></div>
+          <div class="boot-tab"><div class="boot-tab-icon"></div><span>Saved</span></div>
           <div class="boot-tab"><div class="boot-tab-icon"></div><span>Buying</span></div>
           <div class="boot-tab"><div class="boot-tab-icon"></div><span>Selling</span></div>
           <div class="boot-tab"><div class="boot-tab-icon"></div><span>Inbox</span></div>
@@ -248,12 +275,14 @@
           (function () {
             var titles = {
               '/tabs/home': 'Browse',
+              '/tabs/savedlistings': 'Saved',
               '/tabs/buying': 'Buying',
               '/tabs/selling': 'Selling',
               '/tabs/inbox': 'Inbox',
-              '/tabs/profile': 'Settings'
+              '/tabs/profile': 'Settings',
+              '/logs': 'Debug logs'
             };
-            var tabOrder = ['Browse', 'Buying', 'Selling', 'Inbox'];
+            var tabOrder = ['Browse', 'Saved', 'Buying', 'Selling', 'Inbox'];
             var path = (window.location.pathname || '').replace(/\/$/, '') || '/';
             var title = titles[path];
             if (!title) {
@@ -263,6 +292,15 @@
             var header = document.getElementById('boot-header');
             if (header) {
               header.textContent = title;
+            }
+            // /logs is not a tab — hide the tab bar skeleton so a stuck boot
+            // shell does not look like a blank Browse screen.
+            if (path === '/logs') {
+              var tabsNav = document.querySelector('#app-boot-shell .boot-tabs');
+              if (tabsNav) {
+                tabsNav.style.display = 'none';
+              }
+              return;
             }
             var activeIndex = tabOrder.indexOf(title);
             if (activeIndex >= 0) {

@@ -26,14 +26,14 @@ describe('browsePaginationUi', () => {
       expect(feedPendingSkeletonCount(base)).toBe(1);
     });
 
-    it('fills incomplete card rows while waiting for the next page', () => {
+    it('hides card-grid placeholders — use load-more spinner instead', () => {
       expect(
         feedPendingSkeletonCount({
           ...base,
           gridColumnCount: 5,
           visibleListingCount: 18,
         }),
-      ).toBe(2);
+      ).toBe(0);
     });
 
     it('hides placeholders while loading more or when feed is exhausted', () => {
@@ -154,6 +154,13 @@ describe('browsePaginationUi', () => {
       const existing = [{ id: 'a' }, { id: 'b' }] as never[];
       const incoming = [{ id: 'b' }, { id: 'c' }] as never[];
       expect(appendBrowseListings(existing, incoming).map((item) => item.id)).toEqual(['a', 'b', 'c']);
+    });
+
+    it('appends all unique listings without a session cap', () => {
+      const existing = Array.from({ length: 500 }, (_, index) => ({ id: `id-${index}` })) as never[];
+      const incoming = [{ id: 'new-1' }, { id: 'new-2' }] as never[];
+      expect(appendBrowseListings(existing, incoming)).toHaveLength(502);
+      expect(appendBrowseListings(existing, incoming).at(-1)?.id).toBe('new-2');
     });
   });
 });

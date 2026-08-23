@@ -33,7 +33,7 @@ const emit = defineEmits<{
   gap: 0.35rem;
   margin: 0 0 0.75rem;
   padding-bottom: 0.5rem;
-  border-bottom: 1px solid var(--ion-color-step-150, rgba(255, 255, 255, 0.12));
+  border-bottom: 1px solid var(--ion-color-step-150);
 }
 
 .mobile-filter-panel__back {
@@ -51,7 +51,7 @@ const emit = defineEmits<{
 }
 
 .mobile-filter-panel__back:focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.85);
+  outline: 2px solid var(--fs-focus-outline-color);
   outline-offset: 2px;
 }
 
@@ -59,10 +59,12 @@ const emit = defineEmits<{
   margin: 0;
   font-size: 0.92rem;
   font-weight: 600;
-  color: var(--ion-text-color, #fff);
+  color: var(--ion-text-color);
 }
 
 .mobile-filter-panel__body {
   min-height: 0;
+  padding-inline: var(--fs-sidebar-inset);
+  padding-bottom: var(--fs-space-md);
 }
 </style>

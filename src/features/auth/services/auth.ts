@@ -6,6 +6,7 @@ import {
   getRedirectResult,
   onAuthStateChanged,
   sendEmailVerification,
+  signInWithCredential,
   signInWithEmailAndPassword,
   signInWithPopup,
   signInWithRedirect,
@@ -50,7 +51,20 @@ import {
   setPendingMfaResolver,
   unenrollAllSmsMfa,
 } from '@/features/auth/services/mfa';
+import {
+  buildFirebaseAuthRedirectUri,
+  isAuthDomainCrossOrigin,
+} from '@/common/services/firebaseAuthDomain';
 import { formatAuthError, getAuthErrorCode } from '@/features/auth/utils/authErrors';
+import {
+  isGoogleIdentityConfigured,
+  resolveGoogleSignInStrategy,
+} from '@/features/auth/services/googleIdentity';
+import {
+  GOOGLE_SIGN_IN_INCOMPLETE_MESSAGE,
+  resolveGoogleRedirectOutcome,
+  shouldAttemptGoogleRedirectRecovery,
+} from '@/features/auth/services/googleRedirectRecovery';
 
 const GOOGLE_REDIRECT_PENDING_KEY = 'firmshake:googleRedirectPending';
 const GOOGLE_REDIRECT_GRACE_MS = 8000;
@@ -181,7 +195,8 @@ export const currentUser = ref<User | null>(null);
 export const authReady = ref(false);
 
 const AUTH_STATE_READY_MAX_MS = 15000;
-const REDIRECT_RESULT_TIMEOUT_MS = 5000;
+/** Allow slow mobile / cold-start OAuth handshakes before treating redirect as empty. */
+const REDIRECT_RESULT_TIMEOUT_MS = 15000;
 
 function syncCurrentUserFromFirebaseSession(reason: string): User | null {
   if (signOutInProgress || !auth?.currentUser) {
@@ -233,15 +248,21 @@ export async function ensureAuthInitialized(maxMs = AUTH_STATE_READY_MAX_MS): Pr
   authReady.value = true;
 }
 
-async function getRedirectResultWithTimeout() {
+async function getRedirectResultWithTimeout(): Promise<{
+  result: Awaited<ReturnType<typeof getRedirectResult>>;
+  timedOut: boolean;
+}> {
   if (!auth) {
-    return null;
+    return { result: null, timedOut: false };
   }
 
-  return Promise.race([
+  let timedOut = false;
+
+  const result = await Promise.race([
     getRedirectResult(auth),
     new Promise<Awaited<ReturnType<typeof getRedirectResult>>>((resolve) => {
       window.setTimeout(() => {
+        timedOut = true;
         debugLog.warn('auth', 'getRedirectResult timed out; continuing without redirect result', {
           timeoutMs: REDIRECT_RESULT_TIMEOUT_MS,
           authCurrentUserUid: auth?.currentUser?.uid ?? null,
@@ -250,6 +271,8 @@ async function getRedirectResultWithTimeout() {
       }, REDIRECT_RESULT_TIMEOUT_MS);
     }),
   ]);
+
+  return { result, timedOut };
 }
 
 export function resolveSessionUser(): User | null {
@@ -274,6 +297,27 @@ function clearAuthSessionState(reason: string): void {
 function hasSessionGoogleRedirectPending(): boolean {
   return typeof sessionStorage !== 'undefined'
     && sessionStorage.getItem(GOOGLE_REDIRECT_PENDING_KEY) !== null;
+}
+
+function hasLocalGoogleRedirectPending(): boolean {
+  if (typeof localStorage === 'undefined') {
+    return false;
+  }
+
+  const localRaw = localStorage.getItem(GOOGLE_REDIRECT_PENDING_KEY);
+  if (!localRaw) {
+    return false;
+  }
+
+  try {
+    const parsed = JSON.parse(localRaw) as GoogleRedirectPendingRecord;
+    if (typeof parsed.at !== 'number') {
+      return true;
+    }
+    return Date.now() - parsed.at <= GOOGLE_REDIRECT_PENDING_TTL_MS;
+  } catch {
+    return true;
+  }
 }
 
 export const googleRedirectProcessing = ref(
@@ -327,9 +371,21 @@ async function startGoogleRedirectSignIn(
   setGoogleRedirectPending(recaptchaAction);
   googleRedirectProcessing.value = true;
 
+  const authDomain = firebaseConfig.authDomain ?? null;
+  const expectedRedirectUri = authDomain
+    ? buildFirebaseAuthRedirectUri(authDomain)
+    : null;
+
   debugLog.info('auth', 'Google redirect: calling signInWithRedirect', {
     action: recaptchaAction,
     routePath: typeof window !== 'undefined' ? window.location.pathname : undefined,
+    authDomain,
+    expectedRedirectUri,
+    pageOrigin: typeof window !== 'undefined' ? window.location.origin : undefined,
+    pageHostname: typeof window !== 'undefined' ? window.location.hostname : undefined,
+    redirectUriMismatchHint: expectedRedirectUri
+      ? `If Google shows redirect_uri_mismatch, add ${expectedRedirectUri} to Google Cloud Console → Credentials → Web client → Authorized redirect URIs (see docs/google-sign-in-ux.md)`
+      : null,
   });
 
   try {
@@ -422,8 +478,11 @@ export async function completeAuthenticationAfterMfa(user: User): Promise<void> 
   }
 }
 
-async function completePopupSignIn(user: User): Promise<void> {
-  debugLog.info('auth', 'Google popup: completeSignIn.start', {
+async function completeGoogleCredentialSignIn(
+  user: User,
+  source: 'gis' | 'popup',
+): Promise<void> {
+  debugLog.info('auth', `Google ${source}: completeSignIn.start`, {
     uid: user.uid,
     email: user.email,
     routePath: typeof window !== 'undefined' ? window.location.pathname : undefined,
@@ -431,16 +490,16 @@ async function completePopupSignIn(user: User): Promise<void> {
 
   try {
     await ensureUserProfile(user, { authProvider: 'google.com' });
-    debugLog.info('auth', 'Google popup: completeSignIn.profileEnsured', { uid: user.uid });
+    debugLog.info('auth', `Google ${source}: completeSignIn.profileEnsured`, { uid: user.uid });
   } catch (err) {
-    debugLog.error('auth', 'Google popup: ensureUserProfile failed', {
+    debugLog.error('auth', `Google ${source}: ensureUserProfile failed`, {
       uid: user.uid,
       error: serializeError(err),
     });
     throw err;
   }
 
-  debugLog.info('auth', 'Google popup: completeSignIn.done', { uid: user.uid });
+  debugLog.info('auth', `Google ${source}: completeSignIn.done`, { uid: user.uid });
 }
 
 async function completeGoogleRedirectSignIn(user: User): Promise<void> {
@@ -623,30 +682,43 @@ async function runGoogleRedirectInit(): Promise<void> {
 async function runGoogleRedirectInitInner(): Promise<void> {
   const pendingRecord = readGoogleRedirectPendingRecord();
   const hadSessionPending = hasSessionGoogleRedirectPending();
-  const hadPendingRedirect = pendingRecord !== null;
-  const pendingOnlyInLocalStorage = hadPendingRedirect && !hadSessionPending;
+  const hadLocalPending = hasLocalGoogleRedirectPending();
+  const hadPendingRedirect = shouldAttemptGoogleRedirectRecovery({
+    hadSessionPending,
+    hadLocalPending,
+  });
 
-  if (pendingOnlyInLocalStorage) {
-    clearGoogleRedirectPending('stale-local-only');
-  }
-
-  const hasPendingRedirect = hasSessionGoogleRedirectPending()
-    || readGoogleRedirectPendingRecord() !== null;
-
-  if (!hasPendingRedirect) {
-    debugLog.debug('auth', 'Google redirect: skipped (no pending redirect on boot)', {
-      hadPendingRedirect,
-      hadSessionPending,
+  if (!hadPendingRedirect) {
+    debugLog.debug('auth', 'Google redirect: no pending marker; consuming orphan result if any', {
       routePath: typeof window !== 'undefined' ? window.location.pathname : undefined,
     });
     await ensureAuthInitialized();
+
+    // Firebase recommends calling getRedirectResult on load so a lost pending
+    // flag cannot strand a completed OAuth handshake.
+    try {
+      const { result: orphan } = await getRedirectResultWithTimeout();
+      if (orphan?.user) {
+        debugLog.warn('auth', 'Google redirect: completed via orphan getRedirectResult (no pending flag)', {
+          uid: orphan.user.uid,
+          email: orphan.user.email,
+        });
+        googleRedirectError.value = null;
+        await completeGoogleRedirectSignIn(orphan.user);
+      }
+    } catch (err) {
+      debugLog.warn('auth', 'Google redirect: orphan getRedirectResult failed', {
+        error: serializeError(err),
+      });
+    }
     return;
   }
 
   logGoogleRedirectPhase('init', {
     hadPendingRedirect,
     hadSessionPending,
-    pendingOnlyInLocalStorage,
+    hadLocalPending,
+    pendingOnlyInLocalStorage: hadLocalPending && !hadSessionPending,
     pendingAction: pendingRecord?.action ?? null,
     returnUrl: typeof window !== 'undefined' ? window.location.href : undefined,
     authDomain: firebaseConfig.authDomain ?? null,
@@ -655,11 +727,19 @@ async function runGoogleRedirectInitInner(): Promise<void> {
     urlHash: typeof window !== 'undefined' ? window.location.hash.slice(0, 120) : undefined,
   });
 
-  const needsRedirectRecovery = hadSessionPending;
+  let redirectResultTimedOut = false;
 
   try {
+    logGoogleRedirectPhase('authStateReady.waiting');
+    await auth!.authStateReady();
+    logGoogleRedirectPhase('authStateReady.done', {
+      authCurrentUserUid: auth!.currentUser?.uid ?? null,
+    });
+
     logGoogleRedirectPhase('getRedirectResult.calling');
-    const result = await getRedirectResultWithTimeout();
+    const resultStarted = Date.now();
+    const { result, timedOut } = await getRedirectResultWithTimeout();
+    redirectResultTimedOut = timedOut;
     logGoogleRedirectPhase('getRedirectResult.done', {
       hasResultUser: Boolean(result?.user),
       resultUid: result?.user?.uid ?? null,
@@ -667,52 +747,67 @@ async function runGoogleRedirectInitInner(): Promise<void> {
       providerId: result?.providerId ?? null,
       operationType: result?.operationType ?? null,
       authCurrentUserUid: auth!.currentUser?.uid ?? null,
+      elapsedMs: Date.now() - resultStarted,
+      timedOut: redirectResultTimedOut,
     });
 
-    if (!needsRedirectRecovery) {
-      if (result?.user) {
-        googleRedirectError.value = null;
-        await completeGoogleRedirectSignIn(result.user);
-        logGoogleRedirectPhase('flow.completed');
-      } else {
-        debugLog.debug('auth', 'Google redirect result: none (normal page load)');
-      }
-      return;
-    }
-
     let sessionUser = result?.user ?? auth!.currentUser;
-    const shouldRecoverRedirect = Boolean(result?.user || hadSessionPending);
 
-    if (!sessionUser && hadSessionPending) {
-      logGoogleRedirectPhase('authStateReady.waiting');
-      await auth!.authStateReady();
-      sessionUser = auth!.currentUser ?? await waitForAuthUser();
-      logGoogleRedirectPhase('authStateReady.done', {
+    if (!sessionUser) {
+      logGoogleRedirectPhase('waitForAuthUser.polling');
+      sessionUser = await waitForAuthUser(5000);
+      logGoogleRedirectPhase('waitForAuthUser.done', {
         authCurrentUserUid: auth!.currentUser?.uid ?? null,
         authCurrentUserEmail: auth!.currentUser?.email ?? null,
         resolvedViaPoll: Boolean(sessionUser && !result?.user),
       });
     }
 
-    if (sessionUser && shouldRecoverRedirect) {
+    const outcome = resolveGoogleRedirectOutcome({
+      hadPending: hadPendingRedirect,
+      hasResultUser: Boolean(result?.user),
+      hasSessionUser: Boolean(sessionUser),
+    });
+
+    if (outcome === 'complete-from-result' || outcome === 'complete-from-session') {
       googleRedirectError.value = null;
-      if (!result?.user) {
+      if (outcome === 'complete-from-session') {
         debugLog.warn('auth', 'Google redirect: empty getRedirectResult, using auth session fallback', {
-          uid: sessionUser.uid,
-          email: sessionUser.email,
+          uid: sessionUser!.uid,
+          email: sessionUser!.email,
+          hadSessionPending,
+          hadLocalPending,
+          timedOut: redirectResultTimedOut,
         });
       }
-      await completeGoogleRedirectSignIn(sessionUser);
-      logGoogleRedirectPhase(result?.user ? 'flow.completed' : 'flow.completedViaFallback');
-    } else if (hadSessionPending) {
-      googleRedirectError.value =
-        'Google sign-in did not complete. Please try again or use email and password.';
+      await completeGoogleRedirectSignIn(sessionUser!);
+      logGoogleRedirectPhase(
+        outcome === 'complete-from-result' ? 'flow.completed' : 'flow.completedViaFallback',
+      );
+    } else if (outcome === 'fail-incomplete') {
+      googleRedirectError.value = GOOGLE_SIGN_IN_INCOMPLETE_MESSAGE;
+      const pageOrigin = typeof window !== 'undefined' ? window.location.origin : undefined;
+      const authDomain = firebaseConfig.authDomain ?? null;
+      const authDomainCrossOrigin = isAuthDomainCrossOrigin({ authDomain, pageOrigin });
       debugLog.error('auth', 'Google redirect failed: no user in redirect result or session', {
         hadPendingRedirect,
+        hadSessionPending,
+        hadLocalPending,
+        timedOut: redirectResultTimedOut,
+        redirectResultTimeoutMs: REDIRECT_RESULT_TIMEOUT_MS,
         authReady: authReady.value,
         currentUserUid: currentUser.value?.uid ?? null,
-        authDomain: firebaseConfig.authDomain ?? null,
-        pageOrigin: typeof window !== 'undefined' ? window.location.origin : undefined,
+        authCurrentUserUid: auth?.currentUser?.uid ?? null,
+        authDomain,
+        pageOrigin,
+        authDomainCrossOrigin,
+        routePath: typeof window !== 'undefined' ? window.location.pathname : undefined,
+        urlSearch: typeof window !== 'undefined' ? window.location.search : undefined,
+        hint: redirectResultTimedOut
+          ? 'getRedirectResult timed out — check authDomain / authorized domains and /logs'
+          : authDomainCrossOrigin
+            ? 'authDomain differs from page hostname — third-party storage may block getRedirectResult; authDomain should match the hosting domain'
+            : 'User may have cancelled Google consent, or OAuth returned to a mismatched origin',
       });
     } else {
       debugLog.debug('auth', 'Google redirect result: none (normal page load)');
@@ -992,6 +1087,73 @@ export async function reloadCurrentUser(user?: User): Promise<User> {
   throw lastError ?? new Error('You must be signed in');
 }
 
+/**
+ * Exchange a Google Identity Services ID token for a Firebase session.
+ * Used by the in-page GIS button / One Tap (no popup window).
+ */
+export async function loginWithGoogleIdToken(
+  idToken: string,
+  recaptchaAction: 'google_login' | 'google_register' = 'google_login',
+): Promise<User | void> {
+  if (!auth) {
+    throw new Error('Firebase is not configured. Add credentials to .env.local');
+  }
+
+  googleRedirectError.value = null;
+  await assertRecaptchaVerified(recaptchaAction);
+  return signInWithGoogleIdToken(idToken);
+}
+
+async function signInWithGoogleIdToken(idToken: string): Promise<User | void> {
+  if (!auth) {
+    throw new Error('Firebase is not configured. Add credentials to .env.local');
+  }
+
+  debugLog.info('auth', 'signInWithGoogleIdToken: entry', {
+    tokenLength: idToken.length,
+    origin: typeof window !== 'undefined' ? window.location.origin : undefined,
+    routePath: typeof window !== 'undefined' ? window.location.pathname : undefined,
+  });
+
+  googleRedirectProcessing.value = true;
+
+  try {
+    const credential = GoogleAuthProvider.credential(idToken);
+    const result = await signInWithCredential(auth, credential);
+    googleRedirectProcessing.value = false;
+
+    debugLog.info('auth', 'Google GIS credential sign-in succeeded', {
+      uid: result.user.uid,
+      email: result.user.email,
+      providerId: result.providerId ?? null,
+      operationType: result.operationType ?? null,
+    });
+
+    if (result.user.email) {
+      await assertNotPlatformBanned(result.user.email);
+    }
+
+    await completeGoogleCredentialSignIn(result.user, 'gis');
+    extendSessionOnLogin();
+    return result.user;
+  } catch (err) {
+    googleRedirectProcessing.value = false;
+
+    if (captureMultiFactorResolver(err)) {
+      debugLog.info('auth', 'Google GIS sign-in: MFA challenge required', {
+        errorCode: getAuthErrorCode(err),
+      });
+      return;
+    }
+
+    debugLog.error('auth', 'Google GIS credential sign-in failed', {
+      error: serializeError(err),
+      errorCode: getAuthErrorCode(err),
+    });
+    throw err;
+  }
+}
+
 export async function loginWithGoogle(
   recaptchaAction: 'google_login' | 'google_register' = 'google_login',
 ): Promise<User | void> {
@@ -1004,13 +1166,19 @@ export async function loginWithGoogle(
   await assertRecaptchaVerified(recaptchaAction);
 
   const provider = new GoogleAuthProvider();
-  const useRedirectOnly = Capacitor.isNativePlatform();
-  const strategy = useRedirectOnly ? 'redirect' : 'popup-first';
+  const isNative = Capacitor.isNativePlatform();
+  const hasGis = isGoogleIdentityConfigured();
+  // GIS in-page button uses loginWithGoogleIdToken; this path is redirect (or rare popup).
+  const strategy = resolveGoogleSignInStrategy({
+    isNativePlatform: isNative,
+    hasGoogleWebClientId: hasGis,
+  });
 
   debugLog.info('auth', 'loginWithGoogle: entry', {
     action: recaptchaAction,
     strategy,
-    nativePlatform: useRedirectOnly,
+    nativePlatform: isNative,
+    gisConfigured: hasGis,
     origin: typeof window !== 'undefined' ? window.location.origin : undefined,
     authDomain: firebaseConfig.authDomain ?? null,
     routePath: typeof window !== 'undefined' ? window.location.pathname : undefined,
@@ -1018,7 +1186,9 @@ export async function loginWithGoogle(
     currentUserUid: currentUser.value?.uid ?? null,
   });
 
-  if (!useRedirectOnly) {
+  // Popup is intentionally not the default — users prefer no new window/tab.
+  // Keep a narrow popup attempt only when explicitly selected via strategy.
+  if (strategy === 'popup') {
     googleRedirectProcessing.value = true;
 
     try {
@@ -1034,7 +1204,7 @@ export async function loginWithGoogle(
       if (result.user.email) {
         await assertNotPlatformBanned(result.user.email);
       }
-      await completePopupSignIn(result.user);
+      await completeGoogleCredentialSignIn(result.user, 'popup');
       extendSessionOnLogin();
       return result.user;
     } catch (err) {
@@ -1070,7 +1240,11 @@ export async function loginWithGoogle(
 
   debugLog.info('auth', 'Google redirect: starting redirect sign-in', {
     action: recaptchaAction,
-    reason: useRedirectOnly ? 'native-platform' : 'popup-blocked-fallback',
+    reason: isNative
+      ? 'native-platform'
+      : strategy === 'popup'
+        ? 'popup-fallback'
+        : 'same-tab-preferred',
     origin: typeof window !== 'undefined' ? window.location.origin : undefined,
     authDomain: firebaseConfig.authDomain ?? null,
   });

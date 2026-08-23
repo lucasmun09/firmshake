@@ -23,6 +23,7 @@ import {
 } from '@/common/services/responseCache';
 import { clearBrowseLocalCacheIfUserChanged } from '@/features/listings/services/browseLocalStorageCache';
 import { clearGeoFilterPrefsIfUserChanged } from '@/features/listings/services/geoFilterStorage';
+import { clearListingPrefsIfUserChanged } from '@/features/listings/services/savedListings';
 import { scheduleTabPrefetch, stopTabFeedPrefetch } from '@/common/services/tabPrefetch';
 import { subscribeUserProfile } from '@/common/services/users';
 
@@ -81,6 +82,7 @@ export async function startGuestBootstrap(): Promise<void> {
 }
 
 async function runGuestBootstrap(): Promise<void> {
+  clearListingPrefsIfUserChanged('anonymous');
   profileReady.value = true;
   bootstrapProfile.value = null;
 
@@ -121,6 +123,7 @@ async function runBootstrap(uid: string): Promise<void> {
   clearCacheIfUserChanged(uid);
   clearBrowseLocalCacheIfUserChanged(uid);
   clearGeoFilterPrefsIfUserChanged(uid);
+  clearListingPrefsIfUserChanged(uid);
 
   const hadCommunitiesCache = hydrateBootstrapFromCache(uid);
 

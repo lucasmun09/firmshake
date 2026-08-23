@@ -175,7 +175,7 @@ function goToNext() {
   margin: 0;
   font-size: 0.98rem;
   line-height: 1.55;
-  color: var(--ion-text-color, #fff);
+  color: var(--ion-text-color);
 }
 
 .carousel-nav {

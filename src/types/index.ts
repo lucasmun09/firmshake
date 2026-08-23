@@ -24,6 +24,23 @@ export interface ListingLocation {
   label?: string;
 }
 
+/** Minimal fields for browse cards, map pins, and feed caches — see listingSummary.ts */
+export interface ListingSummary {
+  id: string;
+  title: string;
+  price: number;
+  imageUrl: string;
+  status: 'active' | 'sold' | 'removed';
+  sellerId: string;
+  communityIds: string[];
+  primaryCategoryId: string;
+  location?: ListingLocation;
+  createdAt?: Date;
+}
+
+/** Full listing document — detail page, create/edit, messaging. */
+export type ListingDetail = Listing;
+
 export interface Listing {
   id: string;
   title: string;

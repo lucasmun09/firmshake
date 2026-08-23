@@ -11,11 +11,21 @@ import {
 } from 'firebase/firestore';
 
 import { debugLog } from '@/common/debug/debugLog';
+import { resolveFirebaseAuthDomain } from '@/common/services/firebaseAuthDomain';
+
+const configuredAuthDomain = import.meta.env.VITE_FIREBASE_AUTH_DOMAIN as string | undefined;
+const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID as string | undefined;
+const pageHostname = typeof window !== 'undefined' ? window.location.hostname : undefined;
+const resolvedAuthDomain = resolveFirebaseAuthDomain({
+  configuredAuthDomain,
+  pageHostname,
+  projectId,
+});
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  authDomain: resolvedAuthDomain,
+  projectId,
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
@@ -24,6 +34,20 @@ const firebaseConfig = {
 export const isFirebaseConfigured = Boolean(
   firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.appId,
 );
+
+if (
+  typeof window !== 'undefined'
+  && configuredAuthDomain
+  && resolvedAuthDomain
+  && configuredAuthDomain !== resolvedAuthDomain
+) {
+  debugLog.info('auth', 'Firebase authDomain resolved to page hostname for redirect compatibility', {
+    configuredAuthDomain,
+    resolvedAuthDomain,
+    pageHostname,
+    pageOrigin: window.location.origin,
+  });
+}
 
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;

@@ -1,5 +1,8 @@
-/** Fraction of total scroll distance (0–1) past which the next page should load. */
-export const DEFAULT_SCROLL_LOAD_THRESHOLD = 0.75;
+/** Fraction of scroll distance at which lazy-reveal paints more in-memory items. */
+export const SCROLL_REVEAL_THRESHOLD = 0.75;
+
+/** @deprecated Prefer SCROLL_REVEAL_THRESHOLD — kept for tests referencing legacy name. */
+export const DEFAULT_SCROLL_LOAD_THRESHOLD = SCROLL_REVEAL_THRESHOLD;
 
 export function scrollProgress(scrollEl: Pick<HTMLElement, 'scrollTop' | 'scrollHeight' | 'clientHeight'>): number {
   const scrollableHeight = scrollEl.scrollHeight - scrollEl.clientHeight;

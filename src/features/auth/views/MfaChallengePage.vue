@@ -6,7 +6,7 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content class="ion-padding">
+    <ion-content>
       <AppContentFrame>
         <p class="intro">
           <template v-if="isPasswordResetFlow">
@@ -129,6 +129,7 @@ async function handleResend() {
 
   try {
     verificationId.value = await sendMfaSignInCode('mfa-challenge-recaptcha');
+    verificationCode.value = '';
   } catch (err) {
     error.value = formatMfaError(err);
   } finally {

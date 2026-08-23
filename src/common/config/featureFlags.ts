@@ -119,3 +119,22 @@ export function useBffBrowse(): boolean {
   }
   return isApiConfigured();
 }
+
+/**
+ * Stripe / meetup deposit payments.
+ *
+ * Default when `VITE_PAYMENTS_ENABLED` is unset: **enabled** (devo / local).
+ * Prod builds must set `VITE_PAYMENTS_ENABLED=false` until live payments are ready.
+ * Alias: `VITE_STRIPE_PAYMENTS_ENABLED` wins when set.
+ */
+export function isPaymentsEnabled(): boolean {
+  const stripeAlias = parseEnvFlag(import.meta.env.VITE_STRIPE_PAYMENTS_ENABLED);
+  if (stripeAlias !== undefined) {
+    return stripeAlias;
+  }
+  const explicit = parseEnvFlag(import.meta.env.VITE_PAYMENTS_ENABLED);
+  if (explicit !== undefined) {
+    return explicit;
+  }
+  return true;
+}

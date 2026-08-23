@@ -9,6 +9,16 @@ import {
   invalidateCachedNamespace,
   setCached,
 } from '@/common/services/responseCache';
+import {
+  listingsFromBrowseSummaryResult,
+  summarizeBrowseSearchResult,
+  type BrowseSummarySearchResult,
+} from '@/features/listings/services/browseSearchSummary';
+import {
+  hydrateBrowseMapPinGroups,
+  type BrowseMapPinGroup,
+  type BrowseMapPinGroupSummary,
+} from '@/features/listings/utils/browseMapPinAggregation';
 import { getApiBaseUrl, isApiConfigured } from '@/utils/apiBaseUrl';
 import type { Listing } from '@/types';
 
@@ -38,6 +48,7 @@ export interface BrowseSearchResult {
   pageSize: number;
   hasMore: boolean;
   engine?: string;
+  pinGroups?: BrowseMapPinGroup[];
 }
 
 function mapBrowseHit(hit: Record<string, unknown>): Listing {
@@ -101,10 +112,19 @@ export async function searchBrowseListings(
   const cacheKey = browseSearchCacheKey({ ...params, page, pageSize });
 
   if (!params.forceRefresh) {
-    const cached = getCached<BrowseSearchResult>(cacheKey);
+    const cached = getCached<BrowseSummarySearchResult>(cacheKey);
     if (cached) {
-      logListingSearchResults({ ...params, page, pageSize }, cached, true);
-      return cached;
+      const listings = listingsFromBrowseSummaryResult(cached);
+      const pinGroups = cached.pinGroups?.length
+        ? hydrateBrowseMapPinGroups(cached.pinGroups, listings)
+        : undefined;
+      const result: BrowseSearchResult = {
+        ...cached,
+        listings,
+        pinGroups,
+      };
+      logListingSearchResults({ ...params, page, pageSize }, result, true);
+      return result;
     }
   }
 
@@ -167,18 +187,25 @@ export async function searchBrowseListings(
     pageSize: number;
     hasMore: boolean;
     engine?: string;
+    pinGroups?: BrowseMapPinGroupSummary[];
   };
 
+  const listings = payload.listings.map(mapBrowseHit);
+  const pinGroups = payload.pinGroups?.length
+    ? hydrateBrowseMapPinGroups(payload.pinGroups, listings)
+    : undefined;
+
   const result: BrowseSearchResult = {
-    listings: payload.listings.map(mapBrowseHit),
+    listings,
     total: payload.total,
     page: payload.page,
     pageSize: payload.pageSize,
     hasMore: payload.hasMore,
     engine: payload.engine,
+    pinGroups,
   };
 
-  setCached(cacheKey, result);
+  setCached(cacheKey, summarizeBrowseSearchResult(result));
   logListingSearchResults(
     {
       ...params,

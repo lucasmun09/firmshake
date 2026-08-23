@@ -9,7 +9,7 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content class="ion-padding">
+    <ion-content>
       <AppContentFrame class="login-create-shell">
         <h1 class="title">Join FirmShake</h1>
         <p class="subtitle">
@@ -43,6 +43,7 @@ import {
 } from '@ionic/vue';
 
 import FirmShakeLogo from '@/components/FirmShakeLogo.vue';
+import AppContentFrame from '@/components/AppContentFrame.vue';
 </script>
 
 <style scoped>
@@ -50,7 +51,7 @@ import FirmShakeLogo from '@/components/FirmShakeLogo.vue';
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding-inline: 0.75rem;
+  padding-inline: var(--fs-toolbar-inset);
 }
 
 .login-create-shell {

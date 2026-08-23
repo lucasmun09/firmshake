@@ -6,14 +6,31 @@
           <ion-back-button default-href="/tabs/home" />
         </ion-buttons>
         <ion-title>{{ listing?.title ?? 'Listing' }}</ion-title>
-        <ion-buttons v-if="listing && isSeller && listing.status === 'active'" slot="end">
-          <ion-button :router-link="`/listing/${listing.id}/edit`">Edit</ion-button>
+        <ion-buttons slot="end">
+          <ion-button
+            v-if="listing"
+            fill="clear"
+            :aria-label="listingBookmarkSaved ? 'Remove from saved listings' : 'Save listing'"
+            @click="handleToggleBookmark"
+          >
+            <ion-icon
+              slot="icon-only"
+              :icon="listingBookmarkSaved ? bookmark : bookmarkOutline"
+              aria-hidden="true"
+            />
+          </ion-button>
+          <ion-button
+            v-if="listing && isSeller && listing.status === 'active'"
+            :router-link="`/listing/${listing.id}/edit`"
+          >
+            Edit
+          </ion-button>
         </ion-buttons>
       </ion-toolbar>
     </ion-header>
 
     <ion-content v-if="loading || !listing" class="listing-content">
-      <AppContentFrame>
+      <AppContentFrame class="app-content-frame--flush-x">
         <ListingDetailSkeleton v-if="loading" />
         <div v-else class="empty-state">
           <p>Listing not found.</p>
@@ -27,7 +44,7 @@
       class="listing-content"
       @ionScroll="onContentScroll"
     >
-      <AppContentFrame>
+      <AppContentFrame class="app-content-frame--flush-x">
       <ListingPhotoGallery
         :image-urls="listing.imageUrls"
         :title="listing.title"
@@ -202,6 +219,7 @@ import { formatPrice } from '@/utils/currency';
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { onIonViewWillEnter } from '@ionic/vue';
+import { bookmark, bookmarkOutline } from 'ionicons/icons';
 import { formatDocumentTitle } from '@/router/pageTitle';
 import {
   IonBackButton,
@@ -211,6 +229,7 @@ import {
   IonContent,
   IonFooter,
   IonHeader,
+  IonIcon,
   IonInput,
   IonItem,
   IonNote,
@@ -225,6 +244,8 @@ import ListingMeetupSection from '@/features/meetups/components/ListingMeetupSec
 import ListingPhotoGallery from '@/features/listings/components/ListingPhotoGallery.vue';
 import ListingRoughLocationMap from '@/features/listings/components/ListingRoughLocationMap.vue';
 import ListingChatSection from '@/features/messages/components/ListingChatSection.vue';
+import { useListingBookmark } from '@/features/listings/composables/useListingBookmark';
+import { trackRecentListing } from '@/features/listings/composables/useRecentListings';
 import AppContentFrame from '@/components/AppContentFrame.vue';
 import ListingDetailSkeleton from '@/components/skeletons/ListingDetailSkeleton.vue';
 import { useLazyReveal } from '@/common/composables/useLazyReveal';
@@ -244,6 +265,7 @@ import {
   subscribeListingAgreements,
 } from '@/common/services/agreements';
 import { authReady, currentUser } from '@/features/auth/services/auth';
+import { isPaymentsEnabled } from '@/common/config/featureFlags';
 import { debugLog, serializeError } from '@/common/debug/debugLog';
 import {
   bootstrapCommunities,
@@ -283,6 +305,10 @@ import type { Agreement, Listing, Message } from '@/types';
 
 const route = useRoute();
 const router = useRouter();
+const listingRouteId = computed(() => route.params.id as string);
+const { isSaved: listingBookmarkSaved, toggleBookmark } = useListingBookmark(
+  () => listingRouteId.value,
+);
 const listing = ref<Listing | null>(null);
 const profile = bootstrapProfile;
 const communities = bootstrapCommunities;
@@ -779,6 +805,7 @@ async function loadListing(options?: { force?: boolean }) {
     });
 
     if (loadedListing) {
+      trackRecentListing(loadedListing);
       categoryName.value = getCategoryName(categories.value, loadedListing.primaryCategoryId);
       communityNames.value = loadedListing.communityIds
         .map((id) => getCommunityName(loadedCommunities, id))
@@ -889,6 +916,14 @@ onUnmounted(() => {
   stopBlockSubscriptions();
   stopAgreementSubscriptions();
 });
+
+async function handleToggleBookmark() {
+  if (!listing.value) {
+    return;
+  }
+
+  await toggleBookmark(listing.value);
+}
 
 async function handleToggleBlock() {
   const user = currentUser.value;
@@ -1003,6 +1038,15 @@ async function handleDeclineProposal(agreementId: string) {
 }
 
 async function handlePayDeposit(agreementId: string) {
+  if (!isPaymentsEnabled()) {
+    const toast = await toastController.create({
+      message: 'Payments are not available in this environment yet.',
+      duration: 3000,
+      color: 'medium',
+    });
+    await toast.present();
+    return;
+  }
   const user = currentUser.value;
   if (!user) {
     return;
@@ -1150,7 +1194,7 @@ async function performRemoveListing() {
 }
 
 .details {
-  padding: 1rem;
+  padding: var(--fs-page-inset-block) var(--fs-page-inset-inline);
 }
 
 .details h1 {

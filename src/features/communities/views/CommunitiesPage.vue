@@ -2,7 +2,7 @@
   <ion-page>
     <AppTopToolbar title="Communities" show-back-button back-href="/tabs/profile" />
 
-    <ion-content class="ion-padding">
+    <ion-content>
       <AppContentFrame>
         <h3 class="section-title">Find a community</h3>
         <p class="section-hint">

@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 
 import {
   BROWSE_LOCAL_CACHE_MAX_ITEMS,
+  BROWSE_LOCAL_CACHE_MAX_KEYS,
   BROWSE_LOCAL_CACHE_VERSION,
   buildBrowseLocalCachePayload,
   buildBrowseLocalAllKey,
@@ -62,7 +63,7 @@ describe('browseLocalStorageCache', () => {
 
     const allKey = buildBrowseLocalAllKey(uid, base);
     const searchKey = buildBrowseLocalSearchKey(uid, { ...base, q: 'bike' });
-    const mapKey = buildBrowseLocalMapKey(uid, viewportFromCenterRadius(38.9, -77.0, 5));
+    const mapKey = buildBrowseLocalMapKey(uid, viewportFromCenterRadius(38.9, -77.0, 5), base);
 
     expect(allKey).toContain('browse-local-all');
     expect(searchKey).toContain('browse-local-search');
@@ -96,8 +97,8 @@ describe('browseLocalStorageCache', () => {
     expect(fresh?.orderedIds).toEqual(['a', 'b']);
   });
 
-  it('caps stored listings at 300 items', () => {
-    const listings = Array.from({ length: 350 }, (_, index) => makeListing(`id-${index}`));
+  it('caps stored listings at 100 items', () => {
+    const listings = Array.from({ length: 150 }, (_, index) => makeListing(`id-${index}`));
     const payload = buildBrowseLocalCachePayload(listings, { hasMore: true });
 
     expect(payload.orderedIds).toHaveLength(BROWSE_LOCAL_CACHE_MAX_ITEMS);
@@ -128,22 +129,57 @@ describe('browseLocalStorageCache', () => {
 
   it('includes zoom in map cache keys', () => {
     const uid = 'user-1';
+    const filterParams = { communityId: 'all' };
     const baseViewport = viewportFromCenterRadius(38.9, -77.0, 5, 10);
     const zoomedViewport = viewportFromCenterRadius(38.9, -77.0, 5, 14);
 
-    const keyAt10 = buildBrowseLocalMapKey(uid, baseViewport);
-    const keyAt14 = buildBrowseLocalMapKey(uid, zoomedViewport);
+    const keyAt10 = buildBrowseLocalMapKey(uid, baseViewport, filterParams);
+    const keyAt14 = buildBrowseLocalMapKey(uid, zoomedViewport, filterParams);
 
     expect(keyAt10).toContain('zoom=10');
     expect(keyAt14).toContain('zoom=14');
     expect(keyAt10).not.toBe(keyAt14);
   });
 
+  it('builds distinct map cache keys per community filter', () => {
+    const uid = 'user-1';
+    const viewport = viewportFromCenterRadius(38.9, -77.0, 5, 11);
+
+    const allKey = buildBrowseLocalMapKey(uid, viewport, { communityId: 'all' });
+    const communityKey = buildBrowseLocalMapKey(uid, viewport, { communityId: 'oak-hill' });
+
+    expect(allKey).toContain('community=all');
+    expect(communityKey).toContain('community=oak-hill');
+    expect(allKey).not.toBe(communityKey);
+  });
+
+  it('persists summary-only fields in localStorage payloads', () => {
+    const uid = 'user-1';
+    const key = buildBrowseLocalAllKey(uid, { communityId: 'all' });
+    const listing = makeListing('summary-test');
+    listing.description = 'Should not be stored';
+    listing.imageUrls = ['https://example.com/a.jpg', 'https://example.com/b.jpg'];
+
+    persistBrowseLocalPool(key, [listing], { hasMore: true });
+
+    const payload = getStaleBrowseLocalCache(key);
+    const stored = payload?.listingsById['summary-test'];
+
+    expect(stored?.title).toBe('Listing summary-test');
+    expect(stored).not.toHaveProperty('description');
+    expect(stored).not.toHaveProperty('imageUrls');
+    expect(stored?.imageUrl).toBe('https://example.com/a.jpg');
+  });
+
   it('removes unavailable listings from all browse-local cache buckets', () => {
     const uid = 'user-1';
     const allKey = buildBrowseLocalAllKey(uid, { communityId: 'all' });
     const searchKey = buildBrowseLocalSearchKey(uid, { communityId: 'all', q: 'bike' });
-    const mapKey = buildBrowseLocalMapKey(uid, viewportFromCenterRadius(38.9, -77.0, 5, 11));
+    const mapKey = buildBrowseLocalMapKey(
+      uid,
+      viewportFromCenterRadius(38.9, -77.0, 5, 11),
+      { communityId: 'all' },
+    );
     const keep = makeListing('keep');
     const remove = makeListing('remove');
 
@@ -158,5 +194,29 @@ describe('browseLocalStorageCache', () => {
     expect(getStaleBrowseLocalCache(searchKey)?.orderedIds).toEqual(['keep']);
     expect(getStaleBrowseLocalCache(mapKey)?.orderedIds).toEqual(['keep']);
     expect(getStaleBrowseLocalCache(allKey)?.listingsById.remove).toBeUndefined();
+  });
+
+  it('evicts oldest cache keys when max key count is exceeded', () => {
+    const uid = 'user-1';
+
+    for (let index = 0; index < BROWSE_LOCAL_CACHE_MAX_KEYS + 3; index += 1) {
+      const key = buildBrowseLocalAllKey(uid, {
+        communityId: 'all',
+        q: index === 0 ? undefined : `query-${index}`,
+      });
+      persistBrowseLocalPool(key, [makeListing(`listing-${index}`)], {
+        hasMore: false,
+      });
+    }
+
+    let browseKeyCount = 0;
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const storageKey = localStorage.key(index);
+      if (storageKey?.startsWith('firmshake-browse-local:') && !storageKey.endsWith('owner-uid')) {
+        browseKeyCount += 1;
+      }
+    }
+
+    expect(browseKeyCount).toBeLessThanOrEqual(BROWSE_LOCAL_CACHE_MAX_KEYS);
   });
 });

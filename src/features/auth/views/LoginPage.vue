@@ -9,7 +9,7 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content class="ion-padding">
+    <ion-content>
       <AppContentFrame v-if="completingAuth || googleRedirectProcessing" class="auth-complete-state">
         <ion-spinner name="crescent" />
         <p>Logging in...</p>
@@ -61,15 +61,15 @@
 
       <div class="divider">or</div>
 
-      <ion-button
-        expand="block"
-        fill="outline"
-        color="medium"
+      <GoogleSignInButton
+        context="signin"
         :disabled="loading"
-        @click="handleGoogleLogin"
-      >
-        {{ loading ? verifyingLabel : 'Continue with Google' }}
-      </ion-button>
+        :loading="loading"
+        :loading-label="verifyingLabel"
+        @credential="handleGoogleCredential"
+        @fallback="handleGoogleLogin"
+        @error="onGoogleButtonError"
+      />
 
       <hr class="section-divider" aria-hidden="true" />
 
@@ -120,9 +120,11 @@ import {
   googleRedirectProcessing,
   loginWithEmail,
   loginWithGoogle,
+  loginWithGoogleIdToken,
   navigateAfterAuthentication,
 } from '@/features/auth/services/auth';
 import { debugLog, serializeError } from '@/common/debug/debugLog';
+import GoogleSignInButton from '@/features/auth/components/GoogleSignInButton.vue';
 import AppContentFrame from '@/components/AppContentFrame.vue';
 import FirmShakeLogo from '@/components/FirmShakeLogo.vue';
 import RecaptchaNotice from '@/components/RecaptchaNotice.vue';
@@ -130,6 +132,7 @@ import { captureMultiFactorResolver, getPendingMfaResolver } from '@/features/au
 import { isFirebaseConfigured, auth } from '@/common/services/firebase';
 import { formatAuthError, type AuthErrorContext } from '@/features/auth/utils/authErrors';
 import { SESSION_EXPIRED_MESSAGE, SESSION_EXPIRED_QUERY } from '@/features/auth/services/sessionExpiry';
+import { isGoogleIdentityConfigured, loadGoogleIdentityServices } from '@/features/auth/services/googleIdentity';
 import { isRecaptchaConfigured, loadRecaptcha } from '@/utils/recaptcha';
 import { GUEST_BROWSE_PATH } from '@/router/rootRoute';
 
@@ -156,6 +159,12 @@ onMounted(() => {
   if (recaptchaEnabled) {
     void loadRecaptcha().catch(() => {
       // Submit handler will surface a useful error if loading fails.
+    });
+  }
+
+  if (isGoogleIdentityConfigured()) {
+    void loadGoogleIdentityServices().catch(() => {
+      // GoogleSignInButton falls back to same-tab redirect when GIS fails to load.
     });
   }
 });
@@ -195,15 +204,19 @@ watch(
     debugLog.info('auth', 'LoginPage: redirect processing finished', {
       ready: state.ready,
       userUid: state.userUid,
+      previousUserUid: previous?.userUid ?? null,
       authCurrentUserUid: auth?.currentUser?.uid ?? null,
       redirectError: state.redirectError,
       routePath: router.currentRoute.value.fullPath,
     });
 
-    if (!state.ready || !state.userUid || state.redirectError) {
+    // Popup cancel / already-signed-in sessions also flip processing false.
+    // Only auto-navigate when redirect recovery newly established a session.
+    if (!state.ready || !state.userUid || state.redirectError || previous?.userUid) {
       debugLog.info('auth', 'LoginPage: redirect finished without recoverable session', {
         ready: state.ready,
         userUid: state.userUid,
+        previousUserUid: previous?.userUid ?? null,
         authCurrentUserUid: auth?.currentUser?.uid ?? null,
         redirectError: state.redirectError,
         routePath: router.currentRoute.value.fullPath,
@@ -281,6 +294,41 @@ async function handleLogin() {
   }
 }
 
+async function handleGoogleCredential(idToken: string) {
+  error.value = '';
+  loading.value = true;
+
+  debugLog.info('auth', 'LoginPage: GIS credential received', {
+    routePath: router.currentRoute.value.fullPath,
+    tokenLength: idToken.length,
+  });
+
+  try {
+    const user = await loginWithGoogleIdToken(idToken);
+    loading.value = false;
+
+    if (user) {
+      await completeAuthAndNavigate(user, 'google');
+      return;
+    }
+
+    if (getPendingMfaResolver()) {
+      await router.push('/mfa-challenge');
+      return;
+    }
+  } catch (err) {
+    error.value = formatAuthError(err, 'google');
+    loading.value = false;
+    debugLog.error('auth', 'LoginPage: GIS credential sign-in failed', {
+      error: serializeError(err),
+    });
+  }
+}
+
+function onGoogleButtonError(message: string) {
+  error.value = message;
+}
+
 async function handleGoogleLogin() {
   error.value = '';
   loading.value = true;
@@ -297,7 +345,7 @@ async function handleGoogleLogin() {
     loading.value = false;
 
     if (user) {
-      debugLog.info('auth', 'LoginPage: popup sign-in returned user', { uid: user.uid });
+      debugLog.info('auth', 'LoginPage: Google sign-in returned user', { uid: user.uid });
       await completeAuthAndNavigate(user, 'google');
       return;
     }
@@ -308,7 +356,7 @@ async function handleGoogleLogin() {
       return;
     }
 
-    debugLog.info('auth', 'LoginPage: Google sign-in ended without user (popup closed or redirect started)', {
+    debugLog.info('auth', 'LoginPage: Google sign-in ended without user (cancelled or redirect started)', {
       googleRedirectProcessing: googleRedirectProcessing.value,
     });
   } catch (err) {

@@ -1,11 +1,26 @@
+import {
+  estimatePrefixUsage,
+  evictBrowseLocalCacheEntries,
+  safeLocalStorageSetItem,
+} from '@/common/services/localStorageQuota';
 import { buildUserCacheKey } from '@/common/services/responseCache';
 import type { BrowseSort } from '@/features/listings/services/browseSearch';
 import type { MapViewportSearch } from '@/features/listings/utils/browseMapView';
+import {
+  listingSummaryToListing,
+  summarizeListings,
+  type ListingSummary,
+} from '@/features/listings/utils/listingSummary';
 import type { Listing } from '@/types';
 
 export const BROWSE_LOCAL_CACHE_VERSION = 1;
 export const BROWSE_LOCAL_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-export const BROWSE_LOCAL_CACHE_MAX_ITEMS = 300;
+/** Max listings per cache bucket — kept modest to avoid filling localStorage. */
+export const BROWSE_LOCAL_CACHE_MAX_ITEMS = 100;
+/** Max distinct filter/viewport cache keys retained in localStorage. */
+export const BROWSE_LOCAL_CACHE_MAX_KEYS = 15;
+/** Soft cap on total bytes used by browse-local keys (evict oldest when exceeded). */
+export const BROWSE_LOCAL_CACHE_MAX_BYTES = 1.5 * 1024 * 1024;
 
 const STORAGE_PREFIX = 'firmshake-browse-local:';
 export const BROWSE_LOCAL_OWNER_UID_KEY = `${STORAGE_PREFIX}owner-uid`;
@@ -14,14 +29,14 @@ const ALL_NAMESPACE = 'browse-local-all';
 const SEARCH_NAMESPACE = 'browse-local-search';
 const MAP_NAMESPACE = 'browse-local-map';
 
-interface StoredListing extends Omit<Listing, 'createdAt'> {
+interface StoredListingSummary extends Omit<ListingSummary, 'createdAt'> {
   createdAt?: string;
 }
 
 export interface BrowseLocalCachePayload {
   version: number;
   orderedIds: string[];
-  listingsById: Record<string, StoredListing>;
+  listingsById: Record<string, StoredListingSummary>;
   hasMore: boolean;
   searchPage?: number;
   searchQuery?: string;
@@ -46,17 +61,18 @@ export interface BrowseLocalFilterKeyParams {
   sort?: BrowseSort;
 }
 
-function reviveListing(stored: StoredListing): Listing {
-  return {
+function reviveSummary(stored: StoredListingSummary): Listing {
+  const listing = listingSummaryToListing({
     ...stored,
     createdAt: stored.createdAt ? new Date(stored.createdAt) : undefined,
-  };
+  });
+  return listing;
 }
 
-function serializeListing(listing: Listing): StoredListing {
+function serializeSummary(summary: ListingSummary): StoredListingSummary {
   return {
-    ...listing,
-    createdAt: listing.createdAt?.toISOString(),
+    ...summary,
+    createdAt: summary.createdAt?.toISOString(),
   };
 }
 
@@ -91,16 +107,32 @@ function readEntry(key: string): BrowseLocalStorageEntry | null {
   }
 }
 
+function enforceBrowseCacheLimits(storageKey: string): void {
+  const isUpdate = isStorageAvailable() && localStorage.getItem(storageKey) !== null;
+  const maxKeys = isUpdate
+    ? BROWSE_LOCAL_CACHE_MAX_KEYS
+    : BROWSE_LOCAL_CACHE_MAX_KEYS - 1;
+
+  evictBrowseLocalCacheEntries({
+    maxEntries: maxKeys,
+    maxBytes: BROWSE_LOCAL_CACHE_MAX_BYTES,
+  });
+
+  if (estimatePrefixUsage(STORAGE_PREFIX) > BROWSE_LOCAL_CACHE_MAX_BYTES) {
+    evictBrowseLocalCacheEntries({
+      maxBytes: BROWSE_LOCAL_CACHE_MAX_BYTES - 32 * 1024,
+    });
+  }
+}
+
 function writeEntry(key: string, entry: BrowseLocalStorageEntry): void {
   if (!isStorageAvailable()) {
     return;
   }
 
-  try {
-    localStorage.setItem(`${STORAGE_PREFIX}${key}`, JSON.stringify(entry));
-  } catch {
-    // Ignore quota errors.
-  }
+  const storageKey = `${STORAGE_PREFIX}${key}`;
+  enforceBrowseCacheLimits(storageKey);
+  safeLocalStorageSetItem(storageKey, JSON.stringify(entry));
 }
 
 function removeEntry(key: string): void {
@@ -144,8 +176,18 @@ export function roundCoordinate(value: number, precision = 3): number {
   return Math.round(value * factor) / factor;
 }
 
-export function buildBrowseLocalMapKey(uid: string, viewport: MapViewportSearch): string {
+export function buildBrowseLocalMapKey(
+  uid: string,
+  viewport: MapViewportSearch,
+  params: BrowseLocalFilterKeyParams,
+): string {
   return buildUserCacheKey(uid, MAP_NAMESPACE, {
+    community: params.communityId,
+    category: params.categoryId ?? '',
+    q: params.q?.trim() ?? '',
+    minPrice: params.priceMin ?? '',
+    maxPrice: params.priceMax ?? '',
+    sort: params.sort ?? 'newest',
     lat: roundCoordinate(viewport.lat),
     lng: roundCoordinate(viewport.lng),
     radiusMiles: viewport.radiusMiles,
@@ -214,7 +256,7 @@ export function listingsFromCachePayload(payload: BrowseLocalCachePayload): List
   return payload.orderedIds
     .map((id) => payload.listingsById[id])
     .filter(Boolean)
-    .map(reviveListing);
+    .map(reviveSummary);
 }
 
 export function getBrowseLocalCache(key: string): BrowseLocalCachePayload | null {
@@ -307,16 +349,16 @@ export function buildBrowseLocalCachePayload(
     viewport?: MapViewportSearch;
   },
 ): BrowseLocalCachePayload {
-  const capped = listings.slice(0, BROWSE_LOCAL_CACHE_MAX_ITEMS);
-  const listingsById: Record<string, StoredListing> = {};
+  const capped = summarizeListings(listings).slice(0, BROWSE_LOCAL_CACHE_MAX_ITEMS);
+  const listingsById: Record<string, StoredListingSummary> = {};
 
-  for (const listing of capped) {
-    listingsById[listing.id] = serializeListing(listing);
+  for (const summary of capped) {
+    listingsById[summary.id] = serializeSummary(summary);
   }
 
   return {
     version: BROWSE_LOCAL_CACHE_VERSION,
-    orderedIds: capped.map((listing) => listing.id),
+    orderedIds: capped.map((summary) => summary.id),
     listingsById,
     hasMore: meta.hasMore,
     searchPage: meta.searchPage,
@@ -394,6 +436,13 @@ export function buildBrowseLocalFilterKeyParams(input: {
 }
 
 export function initBrowseLocalCacheOnPageLoad(): void {
+  if (isStorageAvailable()) {
+    evictBrowseLocalCacheEntries({
+      maxEntries: BROWSE_LOCAL_CACHE_MAX_KEYS,
+      maxBytes: BROWSE_LOCAL_CACHE_MAX_BYTES,
+    });
+  }
+
   const owner = getBrowseLocalCacheOwnerUid();
   if (owner) {
     return;

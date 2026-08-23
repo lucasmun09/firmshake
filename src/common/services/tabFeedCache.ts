@@ -6,6 +6,11 @@ import {
   invalidateCachedNamespace,
   setCached,
 } from '@/common/services/responseCache';
+import {
+  listingSummaryToListing,
+  summarizeListings,
+  type ListingSummary,
+} from '@/features/listings/utils/listingSummary';
 import type { Listing, MessageThread } from '@/types';
 
 const THREADS_NAMESPACE = 'tab-inbox-threads';
@@ -25,12 +30,13 @@ function reviveThread(thread: MessageThread): MessageThread {
   };
 }
 
-function reviveListing(listing: Listing): Listing {
+function reviveSummary(summary: ListingSummary): Listing {
+  const listing = listingSummaryToListing(summary);
   const createdAt =
-    listing.createdAt instanceof Date
-      ? listing.createdAt
-      : listing.createdAt
-        ? new Date(listing.createdAt as unknown as string)
+    summary.createdAt instanceof Date
+      ? summary.createdAt
+      : summary.createdAt
+        ? new Date(summary.createdAt as unknown as string)
         : undefined;
 
   return {
@@ -62,17 +68,17 @@ export function setCachedInboxThreads(uid: string, threads: MessageThread[]): vo
 }
 
 export function getCachedSellingListings(uid: string): Listing[] | null {
-  const fresh = getCached<Listing[]>(sellingListingsCacheKey(uid));
-  return fresh ? fresh.map(reviveListing) : null;
+  const fresh = getCached<ListingSummary[]>(sellingListingsCacheKey(uid));
+  return fresh ? fresh.map(reviveSummary) : null;
 }
 
 export function getStaleSellingListings(uid: string): Listing[] | null {
-  const stale = getStaleCached<Listing[]>(sellingListingsCacheKey(uid));
-  return stale ? stale.map(reviveListing) : null;
+  const stale = getStaleCached<ListingSummary[]>(sellingListingsCacheKey(uid));
+  return stale ? stale.map(reviveSummary) : null;
 }
 
 export function setCachedSellingListings(uid: string, listings: Listing[]): void {
-  setCached(sellingListingsCacheKey(uid), listings);
+  setCached(sellingListingsCacheKey(uid), summarizeListings(listings));
 }
 
 export function invalidateTabFeedCaches(uid: string): void {

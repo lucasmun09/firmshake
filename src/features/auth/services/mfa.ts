@@ -13,7 +13,14 @@ import {
 import { auth } from '@/common/services/firebase';
 import { withFirestoreRetry } from '@/common/services/firestoreAuth';
 import { debugLog, maskPhoneNumber, serializeError } from '@/common/debug/debugLog';
-import { getAuthErrorCode } from '@/features/auth/utils/authErrors';
+import {
+  freeLocalStorageForAuth,
+  isQuotaExceededError,
+} from '@/common/services/localStorageQuota';
+import {
+  getAuthErrorCode,
+  MFA_INTERNAL_ERROR_CODES,
+} from '@/features/auth/utils/authErrors';
 import { isRecaptchaDisabled, resetLoginRecaptchaForPhoneMfa } from '@/utils/recaptcha';
 
 type IdTokenClaims = {
@@ -45,6 +52,25 @@ function attachMfaStep(error: unknown, step: string): unknown {
     Object.assign(error, { mfaStep: step });
   }
   return error;
+}
+
+function normalizeMfaSendError(error: unknown, step: string): unknown {
+  if (isQuotaExceededError(error)) {
+    debugLog.error('mfa', 'MFA SMS blocked by localStorage quota', {
+      internalCode: MFA_INTERNAL_ERROR_CODES.STORAGE_QUOTA,
+      step,
+      error: serializeError(error),
+    });
+    return Object.assign(
+      error instanceof Error ? error : new Error('Storage quota exceeded'),
+      {
+        code: 'firmshake/storage-quota-exceeded',
+        mfaStep: step,
+      },
+    );
+  }
+
+  return attachMfaStep(error, step);
 }
 
 let recaptchaVerifier: RecaptchaVerifier | null = null;
@@ -157,8 +183,17 @@ export function clearRecaptchaVerifier(): void {
   }
 }
 
-export async function getRecaptchaVerifier(containerId: string): Promise<RecaptchaVerifier> {
+export async function getRecaptchaVerifier(
+  containerId: string,
+  options?: { reuse?: boolean },
+): Promise<RecaptchaVerifier> {
   const firebaseAuth = requireAuth();
+
+  if (options?.reuse && recaptchaVerifier && recaptchaContainerId === containerId) {
+    debugLog.info('mfa', 'Reusing recaptcha verifier', { containerId });
+    return recaptchaVerifier;
+  }
+
   clearRecaptchaVerifier();
   resetLoginRecaptchaForPhoneMfa();
 
@@ -201,6 +236,8 @@ export async function sendMfaEnrollmentCode(
   containerId: string,
 ): Promise<string> {
   const firebaseAuth = requireAuth();
+
+  freeLocalStorageForAuth();
 
   let activeUser = firebaseAuth.currentUser ?? user;
   if (!activeUser) {
@@ -318,7 +355,7 @@ export async function sendMfaEnrollmentCode(
           ? 'Enable SMS Multi-factor Authentication in Firebase Console (Authentication → Sign-in method → Advanced)'
           : undefined,
     });
-    throw attachMfaStep(error, step);
+    throw normalizeMfaSendError(error, step);
   }
 }
 
@@ -452,6 +489,8 @@ export async function sendMfaSignInCode(containerId: string): Promise<string> {
     throw new Error('No MFA sign-in in progress');
   }
 
+  freeLocalStorageForAuth();
+
   const phoneHint = resolver.hints.find(
     (hint) => hint.factorId === PhoneMultiFactorGenerator.FACTOR_ID,
   );
@@ -459,21 +498,34 @@ export async function sendMfaSignInCode(containerId: string): Promise<string> {
     throw new Error('No phone factor is enrolled for this account');
   }
 
-  debugLog.info('mfa', 'Sending MFA sign-in code', { containerId });
+  const reusingVerifier = Boolean(recaptchaVerifier && recaptchaContainerId === containerId);
+  debugLog.info('mfa', 'Sending MFA sign-in code', { containerId, reusingVerifier });
+
+  let step = 'recaptcha';
 
   try {
-    const verifier = await getRecaptchaVerifier(containerId);
+    const verifier = await getRecaptchaVerifier(containerId, { reuse: reusingVerifier });
+
+    step = 'verifyPhoneNumber';
     const phoneAuthProvider = new PhoneAuthProvider(firebaseAuth);
     const verificationId = await phoneAuthProvider.verifyPhoneNumber(
       { multiFactorHint: phoneHint, session: resolver.session },
       verifier,
     );
 
-    debugLog.info('mfa', 'MFA sign-in SMS requested');
+    debugLog.info('mfa', 'MFA sign-in SMS requested', {
+      verificationIdPrefix: verificationId.slice(0, 8),
+      reusingVerifier,
+    });
     return verificationId;
   } catch (error) {
-    debugLog.error('mfa', 'MFA sign-in SMS failed', { error: serializeError(error) });
-    throw error;
+    debugLog.error('mfa', 'MFA sign-in SMS failed', {
+      step,
+      reusingVerifier,
+      errorCode: getAuthErrorCode(error),
+      error: serializeError(error),
+    });
+    throw normalizeMfaSendError(error, step);
   }
 }
 

@@ -1,7 +1,15 @@
 import { debugLog, serializeError } from '@/common/debug/debugLog';
+import { isQuotaExceededError } from '@/common/services/localStorageQuota';
 
 export type AuthErrorContext = 'login' | 'register' | 'google';
 export type PasswordResetErrorContext = 'request' | 'verify' | 'update';
+
+/** Internal error codes logged via debugLog — never shown raw to users. */
+export const MFA_INTERNAL_ERROR_CODES = {
+  STORAGE_QUOTA: 'MFA_RESEND_STORAGE_QUOTA',
+  RECAPTCHA_FAILED: 'MFA_RESEND_RECAPTCHA_FAILED',
+  UNKNOWN: 'MFA_UNKNOWN_ERROR',
+} as const;
 
 const LOGIN_MESSAGES: Record<string, string> = {
   'auth/invalid-email': 'Please enter a valid email address.',
@@ -59,6 +67,7 @@ const MFA_MESSAGES: Record<string, string> = {
   'auth/quota-exceeded': "We couldn't send a verification code right now. Please try again later.",
   'auth/missing-phone-number': 'Please enter a valid phone number.',
   'auth/user-token-expired': 'Your session expired. Sign in again and retry.',
+  'auth/session-expired': 'Your sign-in session expired. Go back to sign in and try again.',
   'auth/requires-recent-login':
     'For security, sign out, sign in again with your password, then retry phone verification.',
 };
@@ -75,6 +84,12 @@ const MFA_STEP_MESSAGES: Record<string, Partial<Record<string, string>>> = {
   verifyPhoneNumber: {
     'auth/internal-error': 'Could not send the verification text. Refresh the page and try again.',
     'auth/captcha-check-failed': 'Security check failed. Refresh the page and try again.',
+    'auth/too-many-requests': 'Too many code requests. Wait a few minutes and try again.',
+    'auth/session-expired': 'Your sign-in session expired. Go back to sign in and try again.',
+    'auth/user-token-expired': 'Your sign-in session expired. Go back to sign in and try again.',
+    'auth/quota-exceeded': "We couldn't send a verification code right now. Please try again later.",
+    'firmshake/storage-quota-exceeded':
+      "We couldn't send a new code right now. Please try again or sign in again.",
   },
   enroll: {
     'auth/internal-error':
@@ -103,6 +118,9 @@ const MFA_STEP_MESSAGES: Record<string, Partial<Record<string, string>>> = {
 };
 
 const DEFAULT_MFA_MESSAGE = 'Phone verification failed. Please try again.';
+
+const MFA_STORAGE_QUOTA_MESSAGE =
+  "We couldn't send a new code right now. Please try again or sign in again.";
 
 const START_OVER_MESSAGES: Record<string, string> = {
   'permission-denied':
@@ -204,8 +222,26 @@ function getMfaStep(error: unknown): string | null {
   return null;
 }
 
+function getInternalMfaErrorCode(error: unknown, code: string | null, step: string | null): string {
+  if (isQuotaExceededError(error) || code === 'firmshake/storage-quota-exceeded') {
+    return MFA_INTERNAL_ERROR_CODES.STORAGE_QUOTA;
+  }
+
+  if (step === 'recaptcha' && code?.includes('recaptcha')) {
+    return MFA_INTERNAL_ERROR_CODES.RECAPTCHA_FAILED;
+  }
+
+  if (step === 'recaptcha' && (code === 'auth/captcha-check-failed' || code === 'auth/internal-error')) {
+    return MFA_INTERNAL_ERROR_CODES.RECAPTCHA_FAILED;
+  }
+
+  return MFA_INTERNAL_ERROR_CODES.UNKNOWN;
+}
+
 function logMfaError(error: unknown, code: string | null, step: string | null): void {
+  const internalCode = getInternalMfaErrorCode(error, code, step);
   debugLog.error('mfa', 'MFA error surfaced to user', {
+    internalCode,
     code: code ?? 'unknown',
     step: step ?? 'unknown',
     error: serializeError(error),
@@ -218,6 +254,14 @@ export function formatMfaError(
 ): string {
   const code = getAuthErrorCode(error);
   const step = getMfaStep(error);
+
+  if (isQuotaExceededError(error) || code === 'firmshake/storage-quota-exceeded') {
+    logMfaError(error, code ?? 'firmshake/storage-quota-exceeded', step);
+    if (step && MFA_STEP_MESSAGES[step]?.['firmshake/storage-quota-exceeded']) {
+      return MFA_STEP_MESSAGES[step]['firmshake/storage-quota-exceeded']!;
+    }
+    return MFA_STORAGE_QUOTA_MESSAGE;
+  }
 
   if (code === 'auth/invalid-phone-number' && options?.invalidPhoneMessage) {
     return options.invalidPhoneMessage;

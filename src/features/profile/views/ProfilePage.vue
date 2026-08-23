@@ -2,7 +2,7 @@
   <ion-page>
     <AppTopToolbar title="Settings" />
 
-    <ion-content class="ion-padding">
+    <ion-content>
       <AppContentFrame>
         <div v-if="currentUser" class="profile-card">
           <ProfilePhotoEditor :community-ids="communityIds" />
@@ -20,9 +20,32 @@
           Post a listing
         </ion-button>
 
+        <ion-button expand="block" fill="outline" router-link="/tabs/savedlistings" class="shortcut-btn">
+          Saved listings
+        </ion-button>
+
         <ion-button expand="block" fill="outline" router-link="/tabs/blockedusers" class="shortcut-btn">
           Blocked users
         </ion-button>
+
+        <section class="appearance-section">
+          <h3 class="section-heading">Appearance</h3>
+          <ion-segment
+            v-model="themePreference"
+            class="theme-segment"
+            @ionChange="onThemePreferenceChange"
+          >
+            <ion-segment-button value="light">
+              <ion-label>Light</ion-label>
+            </ion-segment-button>
+            <ion-segment-button value="dark">
+              <ion-label>Dark</ion-label>
+            </ion-segment-button>
+            <ion-segment-button value="system">
+              <ion-label>System</ion-label>
+            </ion-segment-button>
+          </ion-segment>
+        </section>
 
         <ion-button
           v-if="showSmsSecurityLink"
@@ -48,20 +71,29 @@ import { useRouter } from 'vue-router';
 import {
   IonButton,
   IonContent,
+  IonLabel,
   IonPage,
+  IonSegment,
+  IonSegmentButton,
 } from '@ionic/vue';
+import {
+  readThemePreference,
+  setThemePreference,
+  type ThemePreference,
+} from '@/common/services/themePreference';
 
 import AppContentFrame from '@/components/AppContentFrame.vue';
 import AppTopToolbar from '@/components/AppTopToolbar.vue';
 import ProfilePhotoEditor from '@/features/profile/components/ProfilePhotoEditor.vue';
 import { currentUser, logout } from '@/features/auth/services/auth';
-import { isMfaEnrolled } from '@/features/auth/services/mfa';
+import { isMfaEnrolled, isPasswordAuthUser } from '@/features/auth/services/mfa';
 import { subscribeUserProfile } from '@/common/services/users';
 import type { UserProfile } from '@/types';
 import { isSuperAdmin } from '@/utils/moderation';
 
 const router = useRouter();
 const profile = ref<UserProfile | null>(null);
+const themePreference = ref<ThemePreference>(readThemePreference());
 
 const communityIds = computed(() => profile.value?.communityIds ?? ['all']);
 const showAdminBadge = computed(() => isSuperAdmin(profile.value));
@@ -71,9 +103,10 @@ const profileDisplayName = computed(
 const profileEmail = computed(
   () => profile.value?.email ?? currentUser.value?.email ?? '',
 );
+/** Optional SMS setup is for email/password accounts only — Google/OAuth skips SMS MFA. */
 const showSmsSecurityLink = computed(() => {
   const user = currentUser.value;
-  return Boolean(user && !isMfaEnrolled(user));
+  return Boolean(user && isPasswordAuthUser(user) && !isMfaEnrolled(user));
 });
 
 let unsubscribeProfile: (() => void) | undefined;
@@ -94,6 +127,14 @@ onUnmounted(() => {
 async function handleLogout() {
   await logout();
   router.replace('/login');
+}
+
+function onThemePreferenceChange(event: CustomEvent) {
+  const next = event.detail.value;
+  if (next === 'light' || next === 'dark' || next === 'system') {
+    themePreference.value = next;
+    setThemePreference(next);
+  }
 }
 </script>
 
@@ -124,7 +165,7 @@ async function handleLogout() {
   padding: 0.25rem 0.4rem;
   border-radius: 4px;
   background: var(--ion-color-primary);
-  color: #fff;
+  color: var(--ion-color-primary-contrast);
 }
 
 .profile-card p {
@@ -136,6 +177,23 @@ async function handleLogout() {
 }
 
 .shortcut-btn {
-  margin-top: 0.75rem;
+  margin-top: var(--fs-form-field-gap);
+}
+
+.appearance-section {
+  margin-top: var(--fs-section-gap);
+}
+
+.section-heading {
+  margin: 0 0 0.65rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ion-color-medium);
+}
+
+.theme-segment {
+  width: 100%;
 }
 </style>

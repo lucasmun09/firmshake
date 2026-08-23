@@ -16,6 +16,8 @@ The Flask API lives in a **separate repo**: [`firmshake-api`](../firmshake-api) 
 | API + Images | Flask | **firmshake-api** |
 | Payments (later) | Stripe | firmshake-api |
 
+**Environments:** deovo (`firmshake-dev`) and prod (`firmshake-prod`) — see [docs/devo-prod-stacks.md](docs/devo-prod-stacks.md).
+
 ## Quick start
 
 ### 1. Firebase
@@ -74,11 +76,39 @@ VITE_API_BASE_URL=https://your-tunnel.ngrok.io
 
 See [docs/MILESTONES.md](docs/MILESTONES.md).
 
+## Local-first browse architecture
+
+Browse is optimized to **work from locally cached listing summaries** and prefetch ahead of the scroll position.
+
+| Concern | Approach |
+|---|---|
+| **Cached shape** | `ListingSummary` (id, title, price, primary image, status, location when geo-active) — not full `Listing` documents |
+| **Storage** | `sessionStorage` via `responseCache` (5 min) + `localStorage` browse pools (24 h, capped) |
+| **Detail on demand** | Description, gallery, seller info load on listing detail / messages only |
+| **Pagination** | Cursor-based pages (no session cap); lazy reveal at **75%** scroll; silent API prefetch at **55%** (max **2 pages ahead**); load-more spinner at **85%** when buffer is outrun |
+| **Spinners** | Minimum **500ms** visible once shown (`useDebouncedVisibility`, `useMinimumDisplayVisibility`) |
+| **API** | Today: `POST /api/v1/browse/search` with client-side summary strip. Phase 2: `POST /api/v1/browse/summary` (see `.cursor/rules/firmshake-local-first.mdc`) |
+
+Key modules: `listingSummary.ts`, `browseLocalStorageCache.ts`, `browseSearchPrefetch.ts`, `HomePage.vue`.
+
+## Geo compute & caching
+
+Distance filtering and map pin clustering run on the **BFF** via a single `POST /api/v1/browse/search` call that always returns `listings` and seller-aggregated `pinGroups`. The client passes `pinGroups` to the map view and memoizes client-side aggregation only as a legacy fallback.
+
+| Layer | TTL | Notes |
+|---|---|---|
+| BFF in-process search cache | **45s** per Cloud Run instance | Key: SHA-256 of search params + viewer UID; caches listings + pinGroups; header `X-Browse-Cache: HIT\|MISS` |
+| Client pin aggregation memo | Until listing coords change | LRU 32 entries; fallback when `pinGroups` absent |
+| sessionStorage browse search | 5 min | Summary listings + pinGroups (listingIds) |
+
+See `.cursor/rules/firmshake-geo-caching.mdc` for bottleneck analysis and Redis/Memorystore path at multi-instance scale.
+
 ## Docs
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Milestones](docs/MILESTONES.md)
 - [Firebase setup](docs/FIREBASE_SETUP.md)
+- [Google Sign-In UX (in-page / GIS)](docs/google-sign-in-ux.md)
 
 ## Related repo
 
@@ -168,7 +198,25 @@ CYPRESS_BASE_URL=https://firmshake-dev.web.app npm run test:integration
 
 #### CI
 
-The GitHub Actions workflow (`.github/workflows/deploy-web.yml`) builds and deploys only — it does **not** run Cypress today. Run integration tests locally before merging, or add a CI job with Firebase secrets + MFA test credentials.
+GitHub Actions (`.github/workflows/deploy-web.yml`) on `main` / `master`:
+
+1. Deploy hosting → **devo** (`firmshake-dev`)
+2. Guest Cypress smoke against deovo
+3. On green → deploy hosting → **prod** (`firmshake-prod`)
+
+Requires GitHub Environments `devo` and `prod` with separate `VITE_*` / Firebase secrets. Prod cutover checklist: [docs/devo-prod-stacks.md](docs/devo-prod-stacks.md).
+
+Local deploy:
+
+```bash
+npm run deploy:hosting:devo   # daily path (alias: npm run deploy:hosting)
+npm run deploy:prod           # firmshake-prod — needs .env.production.local (see .env.production.example)
+npm run firebase:setup:prod   # write prod SDK config to .env.production.local
+```
+
+```bash
+CYPRESS_BASE_URL=https://firmshake-dev.web.app npm run test:integration
+```
 
 ### Smoke spec coverage
 

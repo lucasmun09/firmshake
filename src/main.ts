@@ -28,8 +28,8 @@ import '@ionic/vue/css/display.css';
  */
 
 /* @import '@ionic/vue/css/palettes/dark.always.css'; */
-/* @import '@ionic/vue/css/palettes/dark.class.css'; */
-import '@ionic/vue/css/palettes/dark.system.css';
+import '@ionic/vue/css/palettes/dark.class.css';
+/* @import '@ionic/vue/css/palettes/dark.system.css'; */
 
 /* Theme variables */
 import './theme/variables.css';
@@ -37,9 +37,11 @@ import './theme/layout.css';
 import './theme/google-maps.css';
 
 import { debugLog } from '@/common/debug/debugLog';
+import { initThemePreferenceOnBoot } from '@/common/services/themePreference';
 import { initResponseCacheOnPageLoad, getCacheOwnerUid } from '@/common/services/responseCache';
 import { initBrowseLocalCacheOnPageLoad } from '@/features/listings/services/browseLocalStorageCache';
 import { initGeoFilterStorageOnPageLoad } from '@/features/listings/services/geoFilterStorage';
+import { initListingPrefsStorageOnPageLoad } from '@/features/listings/services/listingPrefsStorage';
 import { hydrateBootstrapFromCache } from '@/common/services/appBootstrap';
 import { bootstrapDirectTabEntry } from '@/common/services/tabPrefetch';
 
@@ -56,6 +58,8 @@ function hasGoogleRedirectPending(): boolean {
 initResponseCacheOnPageLoad();
 initBrowseLocalCacheOnPageLoad();
 initGeoFilterStorageOnPageLoad();
+initListingPrefsStorageOnPageLoad();
+initThemePreferenceOnBoot();
 const cacheOwnerUid = getCacheOwnerUid() ?? undefined;
 hydrateBootstrapFromCache(cacheOwnerUid);
 
@@ -82,4 +86,5 @@ router.isReady().then(() => {
   sessionStorage.removeItem(BOOTSTRAP_RELOAD_KEY);
   sessionStorage.removeItem(BOOTSTRAP_RELOAD_COUNT_KEY);
   sessionStorage.removeItem(CHUNK_RELOAD_KEY);
+  document.getElementById('app-boot-shell')?.remove();
 });

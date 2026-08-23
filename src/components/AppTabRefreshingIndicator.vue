@@ -13,20 +13,28 @@
 import { toRef } from 'vue';
 import { IonSpinner } from '@ionic/vue';
 
-import { useDebouncedVisibility } from '@/common/composables/useDebouncedVisibility';
+import {
+  LOADING_SPINNER_MIN_DISPLAY_MS,
+  useDebouncedVisibility,
+} from '@/common/composables/useDebouncedVisibility';
 
 const props = withDefaults(
   defineProps<{
     active?: boolean;
     delayMs?: number;
+    minDisplayMs?: number;
   }>(),
   {
     active: false,
     delayMs: 300,
+    minDisplayMs: LOADING_SPINNER_MIN_DISPLAY_MS,
   },
 );
 
-const show = useDebouncedVisibility(toRef(props, 'active'), props.delayMs);
+const show = useDebouncedVisibility(toRef(props, 'active'), {
+  delayMs: props.delayMs,
+  minDisplayMs: props.minDisplayMs,
+});
 </script>
 
 <style scoped>
@@ -53,6 +61,6 @@ const show = useDebouncedVisibility(toRef(props, 'active'), props.delayMs);
 .refresh-indicator ion-spinner {
   width: 1.125rem;
   height: 1.125rem;
-  --color: rgba(255, 255, 255, 0.92);
+  --color: var(--fs-toolbar-contrast);
 }
 </style>

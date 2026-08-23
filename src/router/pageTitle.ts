@@ -9,6 +9,7 @@ export const APP_TITLE_PREFIX = 'firm-shake';
 /** Tab root paths shown in the index.html boot shell. */
 export const TAB_PATH_TITLES: Record<string, string> = {
   '/tabs/home': 'Browse',
+  '/tabs/savedlistings': 'Saved',
   '/tabs/login-create': 'Login/Create',
   '/tabs/buying': 'Buying',
   '/tabs/selling': 'Selling',
@@ -30,6 +31,7 @@ const ROUTE_NAME_TITLES: Record<string, string> = {
   InboxListingMessages: 'Messages',
   FirmShakeView: 'FirmShake',
   Profile: 'Settings',
+  SavedListings: 'Saved',
   BlockedUsers: 'Blocked Users',
   CreateCommunity: 'Create Community',
   Login: 'Login',

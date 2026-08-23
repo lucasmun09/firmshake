@@ -54,7 +54,7 @@ const initials = computed(() => {
   border-radius: 50%;
   overflow: hidden;
   background: var(--ion-color-primary-shade);
-  color: #fff;
+  color: var(--ion-color-primary-contrast);
   font-weight: 600;
   flex-shrink: 0;
 }

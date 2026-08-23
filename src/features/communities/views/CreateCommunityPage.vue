@@ -2,7 +2,7 @@
   <ion-page>
     <AppTopToolbar title="Create Community" show-back-button back-href="/tabs/communities" />
 
-    <ion-content class="ion-padding">
+    <ion-content>
       <AppContentFrame>
         <p class="section-hint">
           {{

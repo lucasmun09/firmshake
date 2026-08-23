@@ -46,7 +46,7 @@ flowchart TB
 | Browse feed (legacy) | `browseFeedCache.ts` | response cache | Auth uid + community + category | 5 min | First page only; cursor not persisted | HomePage module init (placeholder) |
 | BFF search | `browseSearch.ts` | response cache (`browse-search`) | uid + filters + geo + page | 5 min | Page payloads | HomePage `loadInitialListings` |
 | Legacy listing search | `listingSearch.ts` | response cache (`listing-search`) | Same (when BFF off) | 5 min | Page payloads | HomePage |
-| Browse local pool | `browseLocalStorageCache.ts` | localStorage | uid + filter key or map viewport | **24 h** | **300 listings** per bucket | HomePage module init + `loadInitialListings` |
+| Browse local pool | `browseLocalStorageCache.ts` | localStorage | uid + filter key or map viewport | **24 h** | **100 summaries** per bucket | HomePage module init + `loadInitialListings` |
 | Tab feeds | `tabFeedCache.ts` | response cache | uid (inbox, selling) | 5 min | Full thread/list snapshots | Tab loaders via `useTabFeedLoader` |
 | Bootstrap | `appBootstrap.ts` | response cache | communities, profile | 5 min | — | `main.ts` + auth bootstrap |
 | Community tab | `browseCommunityStorage.ts` | sessionStorage | **Global** (not uid-scoped) | Session | — | HomePage ref init |

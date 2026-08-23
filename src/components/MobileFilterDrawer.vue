@@ -90,7 +90,8 @@ function onTouchEnd(event: TouchEvent) {
 
 <style scoped>
 .mobile-filter-drawer {
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: visible;
   width: 100%;
   min-height: 0;
 }

@@ -8,6 +8,15 @@
           <ion-label>Browse</ion-label>
         </ion-tab-button>
 
+        <ion-tab-button
+          tab="savedlistings"
+          href="/tabs/savedlistings"
+          @click.capture="onTabClick($event, '/tabs/savedlistings')"
+        >
+          <ion-icon :icon="bookmarkOutline" />
+          <ion-label>Saved</ion-label>
+        </ion-tab-button>
+
         <template v-if="showGuestTabBar">
           <ion-tab-button
             tab="login-create"
@@ -56,6 +65,7 @@ import {
 } from '@ionic/vue';
 import {
   bagOutline,
+  bookmarkOutline,
   chatbubbleOutline,
   homeOutline,
   personCircleOutline,

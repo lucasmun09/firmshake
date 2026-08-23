@@ -1,0 +1,94 @@
+---
+description: Local-first browse architecture — summary caching, prefetch pagination, minimal API reads
+alwaysApply: true
+---
+
+# Local-first cached listings
+
+Reference for browse/list performance. Prefer extending these patterns over inventing alternatives unless requirements change.
+
+## Core principles
+
+1. **Work with items stored locally** — browse feeds, map pools, and tab caches persist listing **summaries** in `sessionStorage` / `localStorage` and hydrate before network.
+2. **Limit stale data exposure** — browse cards and list rows use **summary fields only** (`ListingSummary`: id, title, price, primary image, status, location when geo-active, sellerId for block filtering). Full `Listing` detail (description, image gallery, seller profile, messages) loads **only on demand** (listing detail page, chat).
+3. **Minimal browse API** — prefer a lightweight search/feed response that omits heavy fields. Phase 1: client strips summaries before cache write; Phase 2: `POST /api/v1/browse/summary` returns summary-shaped hits only (see contract in `browseSearchSummary.ts`).
+4. **Prefetch / anticipatory pagination** — lazy-reveal paints from the in-memory pool; **prefetch the next API page silently at ~55%** scroll/reveal progress; show a load-more spinner only when the user **outruns the buffer (~85%)** or fetch exceeds ~1–2s.
+5. **Spinner minimum display: 500ms** — loading spinners (`AppTabRefreshingIndicator`, browse load-more) stay visible at least **500ms** once shown to avoid flicker (`useDebouncedVisibility` + `LOADING_SPINNER_MIN_DISPLAY_MS`).
+
+## Listing shapes
+
+| Type | Use | Fields |
+|---|---|---|
+| `ListingSummary` | Browse cards, map pins, feed/tab caches | id, title, price, imageUrl, status, location?, sellerId, communityIds, primaryCategoryId, createdAt? |
+| `Listing` / `ListingDetail` | Detail page, create/edit, messaging | Full document incl. description, imageUrls[], sellerName, categories |
+
+**Deposit on browse cards** uses the global constant `MEETUP_DEPOSIT_AMOUNT` — not stored per listing in summary cache.
+
+**Implementation:** `src/types/index.ts`, `src/features/listings/utils/listingSummary.ts`.
+
+## Cache layers
+
+| Layer | Storage | TTL | Contents |
+|---|---|---|---|
+| `responseCache` / `browse-search` | sessionStorage | 5 min | Per-page `BrowseSearchResult` with summarized listings |
+| `browseFeedCache` | sessionStorage | 5 min | First Firestore feed page (summaries only) |
+| `browseLocalStorageCache` | localStorage | 24 h | Merged browse/map/search pools (summaries, max 100 items / 15 keys) |
+| `tabFeedCache` | sessionStorage | 5 min | Selling tab listings as summaries |
+
+Caches revive summaries to `Listing` with empty detail defaults via `listingSummaryToListing()` so existing components keep working.
+
+**Implementation:** `responseCache.ts`, `browseFeedCache.ts`, `browseLocalStorageCache.ts`, `tabFeedCache.ts`, `browseSearch.ts`.
+
+## Pagination & prefetch
+
+| Trigger | Threshold | Action |
+|---|---|---|
+| Lazy reveal (paint) | **75%** scroll (`SCROLL_REVEAL_THRESHOLD`) | Reveal more items from fetched pool (`useLazyReveal`) |
+| Silent feed prefetch | **55%** scroll or reveal ratio (`BROWSE_REVEAL_PREFETCH_THRESHOLD`) | Fetch next page without spinner (`ensureBrowseFeedBuffer`) |
+| Load-more spinner | **85%** outrun (`BROWSE_OUTRUN_BUFFER_THRESHOLD`) or bottom sentinel + blocked buffer | Visible `loadingMore` spinner + explicit fetch |
+| Initial BFF buffer | Pages **2–3** after page 1 (keyword search: **2**) | Silent prefetch on first search (`prefetchBrowseSearchBuffer`) |
+| Scroll buffer ahead | **2** pages beyond highest loaded | Maintained while scrolling (`browseSearchPagesToMaintainBuffer`) |
+
+If a fetch takes longer than ~1–2s, the load-more spinner may appear even when buffer logic would normally stay silent.
+
+**Implementation:** `scrollLoadThreshold.ts`, `browseSearchPrefetch.ts`, `browsePaginationConfig.ts`, `browsePrefetchGuards.ts`, `HomePage.vue`, `useLazyReveal.ts`.
+
+## Browse pagination & read budget
+
+Pagination exists to avoid loading the world — not to impose an arbitrary session cap. Prefer cursor-based pages and bounded prefetch over hard total limits.
+
+### Recommended strategies
+
+| Strategy | Detail | Status |
+|---|---|---|
+| **Cursor pagination only** | No arbitrary total cap; user scroll loads more until `hasMore=false`. | Implemented |
+| **Page size** | **24–50** summary fields per page (`LISTINGS_PAGE_SIZE`, map: **100** per viewport page). | Implemented |
+| **Prefetch buffer** | **1–2 pages ahead** silently (`BROWSE_SEARCH_SCROLL_BUFFER_AHEAD=2`); cap prefetch **depth**, not total results. | Implemented (`browsePrefetchGuards.ts`, in-flight dedupe in `HomePage.vue`) |
+| **Soft in-memory ceiling** | Optional trim of off-screen pages from memory (not user-visible total) for very long sessions — tradeoff: less RAM vs re-fetch on scroll-back. | Future — `localStorage` pool caps at **100 summaries / bucket** |
+| **Map-specific** | Load pins for sidebar **radius only**; paginate map pool separately (`BROWSE_MAP_MAX_PREFETCH_PAGES=3` × 100/page per viewport). Pan/zoom refetches a new viewport bucket — do not fetch all pins globally. | Implemented |
+| **Search vs browse** | Keyword search has higher relevance density; still paginates with smaller initial prefetch (`BROWSE_TEXT_SEARCH_PREFETCH_PAGES=2`). | Implemented |
+| **Read budget guards** | Max concurrent page fetches (deduped in-flight map), debounced scroll, **45s BFF cache** + **5 min sessionStorage** — do not refetch identical params. | Implemented — constants in `browsePaginationConfig.ts` |
+| **Firestore fallback** | **Typesense is the production path.** Fallback limits **scan depth per request** (`BROWSE_FIRESTORE_MAX_SCAN`, default **1000**), not per session. | Implemented (firmshake-api `browse_search.py`) |
+
+**Constants:** `src/features/listings/utils/browsePaginationConfig.ts`
+
+### What NOT to do
+
+- **Hard session caps** (e.g. “300 listings max”) — pagination already bounds reads per request.
+- **Loading full `ListingDetail`** in browse pages — summaries only; detail on demand.
+
+## Minimal browse API (phased)
+
+**Today:** `POST /api/v1/browse/search` returns full listing documents; client maps hits then **strips to summary before cache write**.
+
+**Phase 2 (firmshake-api):** add `POST /api/v1/browse/summary` — same request body as `/search`, response listings omit `description`, `imageUrls` (primary `imageUrl` only), and other detail-only fields. Typesense/Firestore queries select summary columns only to cut read/transfer cost.
+
+**Client contract:** `BrowseSummarySearchResult`, `searchBrowseSummaryListings()` in `browseSearchSummary.ts` — wired when API ships; until then falls back to `searchBrowseListings` + `summarizeBrowseSearchResult`.
+
+## Loading UX
+
+- **Tab refresh:** debounced show **300ms**, minimum visible **500ms** (`AppTabRefreshingIndicator`).
+- **Browse load-more:** immediate show, minimum visible **500ms** (`useMinimumDisplayVisibility`).
+- **Initial browse skeleton:** **500ms** minimum via `useLazyReveal` (`minSkeletonMs`).
+
+Cross-reference **Loading UX** and **UI performance** in `firmshake-design.mdc`.

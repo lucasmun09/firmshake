@@ -33,9 +33,9 @@ const emit = defineEmits<{
   margin: 0;
   padding: 0.55rem 0;
   border: none;
-  border-bottom: 1px solid var(--ion-color-step-150, rgba(255, 255, 255, 0.12));
+  border-bottom: 1px solid var(--ion-color-step-150);
   background: transparent;
-  color: var(--ion-text-color, #fff);
+  color: var(--ion-text-color);
   font-size: 0.92rem;
   line-height: 1.35;
   text-align: left;
@@ -43,7 +43,7 @@ const emit = defineEmits<{
 }
 
 .mobile-filter-nav-row:focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.85);
+  outline: 2px solid var(--fs-focus-outline-color);
   outline-offset: 2px;
 }
 

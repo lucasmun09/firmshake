@@ -1,0 +1,279 @@
+---
+description: FirmShake product and UX design decisions (messages, auth, branding, loading, optimization)
+alwaysApply: true
+---
+
+# FirmShake design steering
+
+Reference for product/UX decisions. Prefer extending these patterns over inventing alternatives unless requirements change.
+
+## Message archival
+
+**Model:** Per-user archive state on `users/{uid}/inboxState/{docId}` with `isArchived: boolean` and `archivedAt` timestamp. Doc IDs match thread keys via `inboxStateDocId(listingId, buyerId?)` — same IDs as inbox threads, not separate archive records.
+
+**Why not on `threads` docs:** Archive is per-user. Storing on shared thread docs would require merge writes that risk overwriting other participants' fields. Subcollection under the user keeps writes isolated.
+
+**Behavior:**
+- New messages do **not** auto-unarchive. User must explicitly unarchive (overflow menu or message view).
+- Toggle archive in place on **Buying**, **Selling**, and **Inbox** tabs — no dedicated archive routes.
+- UI: `TabArchivedSection` — collapsed "See archived messages" button; expanded shows divider + header + archived rows.
+  - Inbox: header **"Archived Messages"**
+  - Buying / Selling: header **"Archived Items"**
+- **Selling:** Only buyer threads are filtered by archive. Seller's own listings always stay in the main list; archived buyer conversations appear only in the archived section.
+
+**Implementation:** `src/features/messages/services/inboxState.ts`, `TabArchivedSection.vue`, `ConversationOverflowMenu.vue`.
+
+## Unread / "New" badge
+
+Show **"New"** only when the thread has unread activity **and** `lastMessageSenderId !== currentUserId`.
+
+**Rationale:** Messages the user just sent should not appear as unread to them. Archived threads never show as unread (`isThreadUnread` returns false when archived).
+
+**Implementation:** `isThreadUnread()` in `inboxState.ts`; badge on Inbox rows and equivalent buying/selling thread rows.
+
+## Blocked users
+
+**Model:** Per-user block list at `users/{uid}/blockedUsers/{blockedUserId}` with `blockedAt` timestamp.
+
+**Management UI:** Settings → **Blocked users** → `/blockedusers`. Live subscription to the block subcollection; display names via profile lookup (`useParticipantProfiles`).
+
+**Block confirmation:** Before blocking, show `ion-alert` with message *"Blocking a user means you will no longer able to see their listing and restricts all communication. Do you still want to proceed?"* and **Yes** / **No**. Unblock from inline toggles (listing detail, messages) stays immediate — no confirmation.
+
+**Block success banner:** After a successful block, show a top `ion-toast` (5s, dismissible): *"You have successfully blocked <name>. You can see all blocked users by going to Gear Icon -> Blocked Users"* using the blocked user's display name from participant profiles.
+
+**Unblock confirmation:** On **Blocked Users** settings page only, show `ion-alert` with message *"The user will be unblocked, and each side can start communicating again. Would you like to proceed?"* and **Accept** / **Cancel**.
+
+**Implementation:** `src/common/services/blocks.ts`, `src/common/services/blockUi.ts`, `BlockedUsersPage.vue`, `ListingDetailPage.vue`, `ListingMessagesPage.vue`, `ProfilePage.vue`.
+
+## Password reset flow
+
+**Do not use** Firebase `sendPasswordResetEmail`. Use **email link sign-in** (`sendSignInLinkToEmail` + `signInWithEmailLink`) so MFA-enrolled users can complete SMS verification before setting a new password.
+
+**Flow:** Forgot password → email link → MFA challenge if enrolled → new password + confirm on `/reset-password` → **sign out** (user signs in fresh with new password).
+
+**Firebase console:** Enable **Email link (passwordless sign-in)** under Authentication → Sign-in method (in addition to Email/Password).
+
+**Client patterns** (match Firebase email-link docs):
+- Store email in `localStorage` (`firmshake.emailForPasswordReset`); clear after successful link sign-in.
+- Track pending flow in `sessionStorage` (`firmshake.passwordResetPending`).
+- Continue URL: `${origin}/reset-password` via `getPasswordResetContinueUrl()`.
+- reCAPTCHA gate before sending link.
+
+**Implementation:** `src/features/auth/services/passwordReset.ts`, `ForgotPasswordPage.vue`, `ResetPasswordPage.vue`.
+
+## Custom domain (`firm-shake.com`)
+
+When adding or changing production domains:
+
+| Surface | Requirement |
+|---|---|
+| Firebase Auth | Add `firm-shake.com` and `www.firm-shake.com` to **Authorized domains** |
+| firmshake-api | `CORS_ORIGINS` must include both apex and `www` |
+| Firebase Hosting | `/controlpanel` and `/controlpanel/*` redirect (301) to `https://firmshake-controlpanel.web.app/` — see `firebase.json` |
+
+**Deploy:** Web/hosting changes → `npm run deploy:hosting` (see deploy rule). API CORS → `firmshake-api` staging deploy.
+
+## Branding
+
+| Element | Choice |
+|---|---|
+| Document title | `firm-shake - <Page>` via `formatDocumentTitle()` / `pageTitle.ts` |
+| Favicon | House + handshake PNG at `public/logo.png` (navy frame, blue/green figures) |
+| Header logo | `FirmShakeLogo` left of toolbar title in `AppTopToolbar`; uses `/logo.png`; optional link to Browse. `size="brand"` on auth/landing pages. |
+
+Do not revert to generic "FirmShake" title prefix or stock Ionic favicon without explicit product decision.
+
+## Guest / unauthenticated UX
+
+**Root routing (`/`):**
+
+| Platform | Guest destination |
+|---|---|
+| Desktop web | `/welcome` — 3-card FirmShake landing carousel |
+| Mobile web | `/tabs/home` — guest browse (no forced landing) |
+| Capacitor native | `/login` |
+
+Signed-in users always land on `/tabs/home`.
+
+**Landing (`/welcome`):** Three cards only — (1) community marketplace / FirmShake concept, (2) bounded meetups/price/agreements, (3) deposits + 50% compensation when broken. Arrow navigation + Get started / Browse listings / Sign in CTAs.
+
+**Mobile web guests:** Bottom tabs show **Browse** + **Login/Create** only. Toolbar replaces profile/gear/notifications with **Login/Create**. Community segment hidden on Browse. Desktop guests browsing keep full tab bar; protected tabs still redirect to login.
+
+**Guest browse promo (mobile):** Unauthenticated mobile browse shows a compact carousel (max **25vh**) above listings — same three FirmShake cards as `/welcome`, with arrow/swipe navigation. Shared copy in `landingCards.ts`; component `GuestBrowsePromo.vue`. **Sell on All** CTA hidden for guests. Filter hamburger sits inline with the search bar (not a separate row).
+
+**Firestore reads:** Guests may read active listings, community feeds, categories, and communities (browse + listing detail). Writes remain auth-only.
+
+**Implementation:** `src/utils/platform.ts`, `src/router/rootRoute.ts`, `LandingPage.vue`, `GuestBrowsePromo.vue`, `LoginCreatePage.vue`, `TabsPage.vue`, `AppTopToolbar.vue`, `HomePage.vue`, `appBootstrap.ts` (`startGuestBootstrap`).
+
+## BFF browse search
+
+**Primary path:** `POST /api/v1/browse/search` via `browseSearch.ts` when `useBffBrowse()` is true (default when API configured). Guest-accessible; optional Bearer token enables block-list filtering.
+
+**Filter UX:**
+- **Community tab:** instant search + `sessionStorage` persistence (`firmshake.browseCommunityId`) — not part of draft/Apply.
+- **Combined Apply** (sidebar button): text search, category, price min/max, geo (center + radius mi), sort.
+- **Draft vs applied:** sidebar/searchbar edit draft state; fetch uses applied state only after Apply (or community change).
+
+**Search engine:** Typesense when `TYPESENSE_HOST` + `TYPESENSE_API_KEY` set on API; Firestore fallback in tests/dev. Location sync uses geopoint field `location: [lat, lng]` + `hasLocation` bool.
+
+**Categories:** `GET /api/v1/categories?active=true` via `categoriesBff.ts` / `categoriesRouter.ts`. Seed data lives in API (`services/data/seed_categories.py` + `scripts/seed_categories.py`); client `ensureCategoriesSeeded()` skipped when BFF browse enabled.
+
+**Pagination:** page-based `hasMore` from BFF (including geo-active searches). Legacy Firestore feed + client `applyBrowseListingFilters` only when `VITE_USE_BFF_BROWSE=false`.
+
+**Sort options:** `newest`, `price_asc`, `price_desc`, `distance` (when geo applied).
+
+**Map view:** List | Map toggle on Browse when BFF enabled; `BrowseMapView.vue` + `@googlemaps/markerclusterer`.
+
+**Map distance filter:** Sidebar **Distance** radius (`BrowseGeoFilter`) drives map search when a geo center is applied — BFF requests use `appliedGeoFilter` lat/lng + `radiusMiles`; map fits bounds to that radius via `centerRadiusMiles`. Pan/zoom does **not** refetch while geo is active (viewport search applies only without an applied center). Map toolbar **Go to current location** / address search uses the sidebar radius and syncs draft + applied geo state. **Implementation:** `resolveMapSearchViewport()` in `browseMapView.ts`, `HomePage.vue` (`onGeoFilterApply`, `buildMapSearchParams`, `loadMapListings`). Map fetches up to **`BROWSE_MAP_MAX_PREFETCH_PAGES`** pages per viewport (100 listings/page) within the applied radius — not a global pin dump.
+
+**Seller pin aggregation:** When one seller has multiple listings within **~105 ft** (`BROWSE_MAP_AGGREGATE_RADIUS_MILES`, 0.02 mi), the map shows **one green pin** with a count label instead of overlapping blue pins. Aggregation is **per seller only** — different sellers at the same coordinates stay separate; same seller at distant locations stay separate. Pin colors: **blue** (`#3880ff`) single listing, **green** (`#2dd36f`) aggregated. Click/hover opens a compact popup: single-item keeps the existing card; aggregated shows scrollable rows (thumbnail, title, price) linking to listing detail. Zoom-level `MarkerClusterer` still handles dense map areas. **BFF:** `POST /api/v1/browse/search` always returns `pinGroups[]` alongside listings; client uses `serverPinGroups` with client-side fallback. **Implementation:** `browse_map_pins.py` (API), `browseMapPinAggregation.ts`, `BrowseMapView.vue`.
+
+**Multi-category:** API accepts `categoryIds[]` with OR semantics; UI single-select for now.
+
+**Implementation:** `browseSearch.ts`, `categoriesBff.ts`, `browseCommunityStorage.ts`, `HomePage.vue`, `BrowseMapView.vue`, firmshake-api `services/browse_search.py`, `routes/v1/browse.py`.
+
+## Settings navigation
+
+**Terminology:** User-facing label is **Settings** (document title `firm-shake - Settings`). Route path stays `/tabs/profile`; internal route name `Profile`.
+
+**Header:** Toolbar avatar is display-only. **Settings** gear icon between avatar and notifications bell navigates to the settings page (`ProfilePage.vue`).
+
+**Mobile toolbar (≤768px):** Title stacks two lines (`FirmShake -` / page name); display name hidden; **ADMIN** badge overlays avatar corner (not inline with title); logo, avatar (`sm`), and action icons scale up for the taller toolbar. Desktop keeps single-line title with name + inline admin badge.
+
+**Mobile filter selects:** `ion-select` uses `action-sheet` on mobile viewports (popover clips inside the fixed filter drawer). Helpers: `resolveIonSelectInterface()`, `useIonSelectInterface()`.
+
+## Theme / appearance
+
+**Model:** User preference stored in `localStorage` at `firmshake.themePreference` — `light`, `dark`, or `system` (default).
+
+**Apply:** Ionic `dark.class.css` palette; toggles `ion-palette-dark` on `document.documentElement`. Inline boot script in `index.html` applies stored preference before first paint to avoid flash. `initThemePreferenceOnBoot()` in `main.ts` re-applies and listens to `prefers-color-scheme` when preference is `system`.
+
+**Settings UI:** Settings → **Appearance** segment (Light / Dark / System) on `ProfilePage.vue`.
+
+**Toolbar contrast:** Primary header chrome (`AppTopToolbar`) uses `--fs-toolbar-contrast` (`--ion-color-primary-contrast`). Secondary browse toolbars (`ion-toolbar.app-toolbar-content`) reset `--color` to `--ion-text-color` so filter/search icons stay visible in light mode.
+
+**Implementation:** `themePreference.ts`, `variables.css`, `layout.css`, `ProfilePage.vue`, `index.html`.
+
+## Loading UX
+
+**Tab refresh indicator:** Replace visible "Updating…" copy with a debounced circular spinner centered in the header toolbar. Default **300ms** show delay + **500ms** minimum display via `AppTabRefreshingIndicator` + `useDebouncedVisibility` — avoids flicker on fast refreshes. See **Local-first cached listings** in `firmshake-local-first.mdc`.
+
+**End-of-list copy:** Show "You have reached the bottom of the list!" only when the list is actually scrollable (`isScrollable`: content height exceeds viewport). Prevents orphan footer text on short lists that fit on screen.
+
+**Implementation:** `AppTabRefreshingIndicator.vue`, `useLazyReveal.ts` (`allItemsRevealed` + `isScrollable`), Browse `HomePage.vue`.
+
+## Optimization choices
+
+Reference for performance architecture. Prefer extending these patterns over inventing alternatives unless requirements change.
+
+### Auth / ID token
+
+**Deduped ID token:** `getDedupedIdToken()` coalesces concurrent `getIdToken` calls for the same user/refresh flag, wraps each fetch in a **2s timeout**, and applies a **60s cooldown** before honoring another forced refresh.
+
+**Why:** Login, router guards, API calls, and Firestore probes all need tokens at once; deduping avoids redundant network work and racey refresh storms.
+
+**Two Firestore-auth paths:**
+- `waitForFirestoreAuth()` — full path: `authStateReady` → ID token → Firestore probe (`getDoc users/{uid}`) with retries (up to **8s** overall, **3s** per probe). Used before data writes and auth-page redirects.
+- `waitForFirestoreAuthNavigation()` — fast path: `authStateReady` + ID token only; skips probe. Used by router guards, bootstrap, and tab prefetch so navigation is not blocked on Firestore propagation.
+
+**Verified-session cache:** Successful auth waits mark the UID verified for **30s** (`AUTH_VERIFIED_TTL_MS`); subsequent waits reuse the cached user. In-flight waits are also deduped per UID.
+
+**Session maintenance:** Proactive token refresh every **12h**, activity-based session extension, and permission-denied → session-expired handling live in `sessionExpiry.ts`. Logout/MFA/user-switch clears token cache via `clearIdTokenCache()` / `clearFirestoreAuthCache()`.
+
+**Tradeoff:** Navigation fast path may reach tab UI before Firestore rules have propagated; tab loaders and `withTransientFirestoreRetry` / `attachRetriableSnapshot` absorb transient permission-denied errors instead of blocking the shell.
+
+**Implementation:** `idToken.ts`, `firestoreAuth.ts`, `sessionExpiry.ts`, `auth.ts`.
+
+### Firestore connection lifecycle
+
+**Reset on session change:** `resetFirestoreConnection()` terminates and recreates Firestore after **logout**, **user switch**, and **MFA login** so IndexedDB persistence leases and cached credentials from the previous session are not reused.
+
+**Multi-tab persistence:** Web uses `persistentMultipleTabManager()`; native uses single-tab cache.
+
+**Retriable reads:** `attachRetriableSnapshot()` and `withTransientFirestoreRetry()` retry permission-denied / timeout errors with backoff while auth propagates, surfacing `SessionExpiredError` only when the session is actually dead.
+
+**Implementation:** `firebase.ts`, `firestoreAuth.ts`, `auth.ts` (logout / MFA / user-switch call sites).
+
+### Tab feeds (stale-while-revalidate)
+
+**SWR cache layer:** `responseCache.ts` — in-memory + `sessionStorage`, **5 min TTL**, `getCached` vs `getStaleCached` (stale allowed for instant paint). `readStaleOnBoot()` hydrates memory from storage before Vue mounts. Per-user keys via `buildUserCacheKey`; `clearCacheIfUserChanged()` invalidates profile/browse/tab namespaces on UID change.
+
+**Tab-specific wrappers:**
+- `tabFeedCache.ts` — inbox threads, selling listings
+- `browseFeedCache.ts` — browse first page (cursor `lastDoc` not persisted; re-fetched on refresh)
+
+**Loader pattern:** `useTabFeedLoader` — **8s** timeout clears stuck spinners; `hydrateFromCache()` paints stale data immediately (`loading=false`, `refreshing=true`) then live Firestore subscription replaces it. Buying/Inbox/Selling pages use this; Browse hydrates similarly in `HomePage.vue`.
+
+**Background prefetch:** After bootstrap, `scheduleTabPrefetch()` runs on `requestIdleCallback` (1.5s fallback): lazy-imports tab route chunks + skeleton components, then subscribes to inbox threads and seller listings to warm caches. Direct tab URL entry (`bootstrapDirectTabEntry`) prefetches eagerly.
+
+**Tradeoff:** Stale cache may briefly show outdated threads/listings until the live subscription fires; acceptable for perceived speed. Pagination cursors are not cached — load-more always hits the network.
+
+**Implementation:** `responseCache.ts`, `tabFeedCache.ts`, `browseFeedCache.ts`, `useTabFeedLoader.ts`, `tabPrefetch.ts`, tab pages under `features/buying`, `features/selling`, `features/messages`, `HomePage.vue`.
+
+### Boot / startup
+
+**Instant boot shell:** Static HTML/CSS skeleton in `index.html` (`#app-boot-shell`) renders before JS — tab-aware title/header. Removed when `router.isReady()` in `App.vue`. Build-version and stale-chunk handlers reload once per session to recover from deploy mismatches.
+
+**Entry split:** `bootstrap.ts` dynamically imports `main-logs` vs `main` so `/logs` does not load Firebase/auth (avoids competing Firestore IndexedDB leases across tabs).
+
+**Early hydration:** `main.ts` calls `initResponseCacheOnPageLoad()`, `hydrateBootstrapFromCache()`, and `bootstrapDirectTabEntry()` before `app.mount()` so first paint can use cached communities/profile/tab feeds.
+
+**App bootstrap:** `startAppBootstrap()` hydrates communities/profile from stale cache, uses `waitForFirestoreAuthNavigation()` (non-blocking on probe failure), subscribes profile with a **2s fallback** to unblock `bootstrapReady`, refreshes communities in background when cache hit, then schedules tab prefetch. `waitForBootstrap()` caps wait at **4s** with seed fallbacks.
+
+**Deferred router post-auth:** Tab-shell navigation (`shouldDeferPostAuthChecks`) does not block on profile/MFA fetches — shell shows immediately; `scheduleDeferredPostAuthCheck()` verifies in background. Cached profile in router guard skips network when possible. After fresh login, `setPostAuthBypass()` skips repeat checks for **30s**.
+
+**Tradeoff:** User may briefly see a tab before deferred redirect to Complete Profile / MFA enroll; acceptable vs blocking every tab switch on Firestore.
+
+**Implementation:** `index.html`, `bootstrap.ts`, `main.ts`, `App.vue`, `appBootstrap.ts`, `router/index.ts`, `router/tabsRoute.ts`, `auth.ts`.
+
+### Network / data fetching
+
+**Batched listing reads:** `getListingsByIds()` chunks IDs into batches of **30** (Firestore `in` limit), runs batches **in parallel**, and optionally reads from local cache first (`preferCache: true`). Used by thread enrichment and buying/selling/inbox row hydration.
+
+**Thread enrichment:** `enrichThreads()` batch-fetches listing metadata for all threads in one call; on failure emits unenriched threads rather than blocking the list.
+
+**Controlled concurrency:** Thread rebuild uses **5** concurrent workers (`REBUILD_CONCURRENCY`); parallel `Promise.all` for independent queries (e.g. sent/received message snapshots).
+
+**Tradeoff:** Parallel batches increase burst load but cut wall-clock time for enriched lists; prefer batching over N sequential `getDoc` calls.
+
+**Implementation:** `listings.ts`, `threads.ts`, `messages.ts`.
+
+### UI performance
+
+Cross-reference **Loading UX** above for the debounced refresh spinner (**300ms** show delay, **500ms** min display) and scrollability-gated end-of-list copy. Cross-reference **`firmshake-local-first.mdc`** for browse prefetch thresholds and summary caching.
+
+**Lazy reveal / virtualized paint:** `useLazyReveal` renders ~**2× viewport** items initially (`batchSize = itemsPerScreen × 2`), loads more on scroll (**75%** `SCROLL_REVEAL_THRESHOLD`), and enforces a **500ms** minimum skeleton display to avoid flash-of-empty. Trailing row skeletons indicate more items below the fold. Silent feed prefetch at **55%** is handled in `HomePage.vue` (`browseSearchPrefetch.ts`).
+
+**Background refresh vs skeleton:** Cache hydration skips the full-page skeleton (`AppTabLoadingState`) when stale data exists; header `AppTabRefreshingIndicator` signals background revalidation instead.
+
+**Implementation:** `useLazyReveal.ts`, `useDebouncedVisibility.ts`, `AppTabRefreshingIndicator.vue`, `AppTabLoadingState.vue`, list pages (Browse, Buying, Selling, Inbox).
+
+## Spacing & padding
+
+Page inset, section gaps, card grid spacing, sidebar padding, and toolbar margins use shared CSS tokens (`--fs-*`) and layout classes. **Do not** stack `ion-padding` on pages that already wrap content in `AppContentFrame`.
+
+**Implementation:** `src/theme/variables.css`, `src/theme/layout.css`, `AppContentFrame.vue`, `.cursor/rules/firmshake-spacing.mdc`.
+
+## Debug logs & targeted tests
+
+When debugging multi-step features, add **`debugLog`** entries (category + message + data) and inspect via **`/logs`**. Behavior changes require unit tests; run **targeted** specs for touched modules (`npm run test:unit -- --run tests/unit/<spec>.ts`), not always the full suite.
+
+**Implementation:** `src/common/debug/debugLog.ts`, `src/features/debug/views/LogsPage.vue`, `.cursor/rules/firmshake-debug-test.mdc`.
+
+## General data patterns
+
+**Inbox / threads filtering:** Subscribe to full `users/{uid}/inboxState` snapshot; partition threads client-side with `partitionByArchive()`. Acceptable while inbox scale is modest — avoids composite queries and keeps archive/read state co-located per user.
+
+**Key modules:** `inboxState.ts`, `threads.ts`, tab pages under `features/buying`, `features/selling`, `features/messages`.
+
+## Setup & troubleshooting docs
+
+When writing or updating setup, deployment, or troubleshooting docs (`docs/*.md`, README setup sections, `.env.example` comments):
+
+- Include a prominent **"What you need to do"** section near the top (after a one-paragraph summary).
+- Use **numbered manual steps** for actions only a human can perform: Firebase Console, Google Cloud Console, Stripe dashboard, DNS, GitHub secrets, etc.
+- Make console paths explicit (project name, menu trail) and provide **copy-paste blocks** for URIs, domains, env values, and CLI commands.
+- Include **how to verify** (retry flow, check `/logs`, expected headers/responses) and **when to redeploy** (or explicitly "no redeploy needed").
+- Do **not** add an empty "What you need to do" section when the doc is purely architectural or client-only with no console steps.
+
+Reference: [`docs/google-sign-in-ux.md`](../../docs/google-sign-in-ux.md), [`docs/FIREBASE_SETUP.md`](../../docs/FIREBASE_SETUP.md).

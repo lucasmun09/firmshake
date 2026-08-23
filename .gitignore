@@ -31,6 +31,7 @@ npm-debug.log*
 /plugins
 /www
 .env.local
+.env.production.local
 .firebase/
 public/firebase-messaging-config.json
 firebase-debug.log

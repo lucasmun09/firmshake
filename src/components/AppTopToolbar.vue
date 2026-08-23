@@ -8,7 +8,12 @@
           </ion-buttons>
           <div class="toolbar-titles">
             <FirmShakeLogo link-to-home class="toolbar-logo" />
-            <span class="toolbar-title">{{ displayTitle }}</span>
+            <span class="toolbar-title toolbar-title--desktop">{{ displayTitle }}</span>
+            <span class="toolbar-title toolbar-title--mobile" aria-hidden="true">
+              <span class="toolbar-title__line">{{ titleLines.line1 }}</span>
+              <span class="toolbar-title__line">{{ titleLines.line2 }}</span>
+            </span>
+            <span class="toolbar-title-sr">{{ displayTitle }}</span>
           </div>
         </div>
 
@@ -21,17 +26,18 @@
 
           <template v-else>
             <div class="profile-text">
-              <span v-if="showAdminBadge" class="admin-badge">ADMIN</span>
+              <span v-if="showAdminBadge" class="admin-badge admin-badge--inline">ADMIN</span>
               <span class="profile-name">{{ profileDisplayName }}</span>
               <span v-if="profileEmail" class="profile-email">{{ profileEmail }}</span>
             </div>
 
-            <div class="profile-avatar" aria-hidden="true">
+            <div class="profile-avatar-wrap">
               <UserAvatar
                 :name="profile?.displayName"
                 :photo-url="profile?.photoUrl"
-                size="xs"
+                :size="avatarSize"
               />
+              <span v-if="showAdminBadge" class="admin-badge admin-badge--overlay">ADMIN</span>
             </div>
 
             <ion-button
@@ -80,10 +86,14 @@ import NotificationPanel from '@/features/messages/components/NotificationPanel.
 import FirmShakeLogo from '@/components/FirmShakeLogo.vue';
 import UserAvatar from '@/components/UserAvatar.vue';
 import { bootstrapProfile } from '@/common/services/appBootstrap';
+import {
+  formatToolbarTitle,
+  splitToolbarTitle,
+} from '@/common/utils/toolbarTitle';
 import { authReady, resolveSessionUser } from '@/features/auth/services/auth';
 import { subscribeUnreadNotificationCount } from '@/features/messages/services/notifications';
 import { isSuperAdmin } from '@/utils/moderation';
-import { isMobileWeb } from '@/utils/platform';
+import { isMobileWeb, isMobileWebViewport } from '@/utils/platform';
 
 const props = withDefaults(
   defineProps<{
@@ -97,11 +107,10 @@ const props = withDefaults(
   },
 );
 
-const displayTitle = computed(() => {
-  const page = props.title.trim();
-  const pageName = page === 'FirmShake' || page === '' ? 'Browse' : page;
-  return `FirmShake - ${pageName}`;
-});
+const displayTitle = computed(() => formatToolbarTitle(props.title));
+const titleLines = computed(() => splitToolbarTitle(props.title));
+
+const avatarSize = computed(() => (isMobileWebViewport() ? 'sm' : 'xs'));
 
 const notificationsOpen = ref(false);
 const unreadCount = ref(0);
@@ -182,14 +191,15 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 0.5rem;
   width: 100%;
-  padding: 0.15rem 0.25rem 0.15rem 0.5rem;
+  padding: 0.15rem var(--fs-toolbar-inset) 0.15rem calc(var(--fs-toolbar-inset) + 0.15rem);
 }
 
 .toolbar-left {
   display: flex;
   align-items: center;
   gap: 0.15rem;
-  flex-shrink: 0;
+  min-width: 0;
+  flex: 1;
 }
 
 .toolbar-back {
@@ -200,6 +210,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 0.4rem;
+  min-width: 0;
 }
 
 .toolbar-logo {
@@ -207,11 +218,40 @@ onUnmounted(() => {
 }
 
 .toolbar-title {
-  font-size: 1.05rem;
   font-weight: 700;
   line-height: 1.15;
-  color: #fff;
+  color: var(--fs-toolbar-contrast);
+}
+
+.toolbar-title--desktop {
+  font-size: 1.05rem;
   white-space: nowrap;
+}
+
+.toolbar-title--mobile {
+  display: none;
+  flex-direction: column;
+  gap: 0.05rem;
+  min-width: 0;
+}
+
+.toolbar-title__line {
+  display: block;
+  font-size: 0.92rem;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.toolbar-title-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .toolbar-right {
@@ -220,7 +260,7 @@ onUnmounted(() => {
   justify-content: flex-end;
   gap: 0.3rem;
   min-width: 0;
-  flex: 1;
+  flex-shrink: 0;
 }
 
 .profile-text {
@@ -235,21 +275,28 @@ onUnmounted(() => {
 
 .admin-badge {
   flex-shrink: 0;
-  font-size: 0.5rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   line-height: 1;
-  padding: 0.18rem 0.3rem;
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.22);
-  color: #fff;
+  color: var(--fs-toolbar-contrast);
+}
+
+.admin-badge--inline {
+  font-size: 0.5rem;
+  padding: 0.18rem 0.3rem;
+}
+
+.admin-badge--overlay {
+  display: none;
 }
 
 .profile-name {
   font-size: 0.78rem;
   font-weight: 600;
   line-height: 1.15;
-  color: #fff;
+  color: var(--fs-toolbar-contrast);
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -265,7 +312,8 @@ onUnmounted(() => {
   text-align: end;
 }
 
-.profile-avatar {
+.profile-avatar-wrap {
+  position: relative;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -297,6 +345,11 @@ onUnmounted(() => {
   --padding-end: 0.1rem;
 }
 
+.settings-btn ion-icon,
+.notification-btn ion-icon {
+  font-size: 1.35rem;
+}
+
 .notification-btn {
   position: relative;
   --padding-start: 0.2rem;
@@ -314,12 +367,63 @@ onUnmounted(() => {
   padding: 0 4px;
 }
 
-@media (min-width: 768px) {
-  .toolbar-layout {
-    padding: 0.25rem 0.75rem;
+@media (max-width: 767.98px) {
+  .app-top-toolbar {
+    --min-height: 3.35rem;
   }
 
-  .toolbar-title {
+  .toolbar-layout {
+    align-items: center;
+    padding-block: 0.35rem;
+  }
+
+  .toolbar-title--desktop {
+    display: none;
+  }
+
+  .toolbar-title--mobile {
+    display: flex;
+  }
+
+  .profile-text {
+    display: none;
+  }
+
+  .admin-badge--overlay {
+    display: block;
+    position: absolute;
+    right: -2px;
+    bottom: -2px;
+    z-index: 1;
+    font-size: 0.42rem;
+    padding: 0.12rem 0.22rem;
+    border-radius: 3px;
+    box-shadow: 0 0 0 1px var(--ion-color-primary);
+  }
+
+  .toolbar-logo :deep(.firmshake-logo__img) {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .settings-btn,
+  .notification-btn {
+    height: 2.35rem;
+    min-height: 2.35rem;
+  }
+
+  .settings-btn ion-icon,
+  .notification-btn ion-icon {
+    font-size: 1.55rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .toolbar-layout {
+    padding: 0.25rem var(--fs-toolbar-inset);
+  }
+
+  .toolbar-title--desktop {
     font-size: 1.15rem;
   }
 

@@ -69,8 +69,16 @@
     </div>
 
     <div v-else-if="isBuyer && agreement.status === 'accepted'" class="action-stack">
-      <ion-button expand="block" :disabled="busy || interactionsDisabled" @click="handlePayDeposit">
+      <ion-button
+        v-if="paymentsEnabled"
+        expand="block"
+        :disabled="busy || interactionsDisabled"
+        @click="handlePayDeposit"
+      >
         {{ busy ? 'Processing...' : `Pay $${agreement.depositAmount} deposit` }}
+      </ion-button>
+      <ion-button v-else expand="block" disabled>
+        Payments coming soon
       </ion-button>
     </div>
 
@@ -107,6 +115,7 @@ import {
   getAgreementStatusLabel,
   startMeetupEnRoute,
 } from '@/common/services/agreements';
+import { isPaymentsEnabled } from '@/common/config/featureFlags';
 import { formatMeetupLocation } from '@/features/meetups/utils/meetupLocation';
 import { currentUser } from '@/features/auth/services/auth';
 import type { Agreement } from '@/types';
@@ -120,6 +129,7 @@ const props = defineProps<{
 
 const router = useRouter();
 const busy = ref(false);
+const paymentsEnabled = isPaymentsEnabled();
 
 const isSeller = computed(() => props.role === 'seller');
 const isBuyer = computed(() => props.role === 'buyer');
@@ -176,6 +186,9 @@ async function handleCancel() {
 }
 
 async function handlePayDeposit() {
+  if (!paymentsEnabled) {
+    return;
+  }
   const user = currentUser.value;
   if (!user) {
     return;

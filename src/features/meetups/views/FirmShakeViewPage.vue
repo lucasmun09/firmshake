@@ -9,7 +9,7 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content class="ion-padding">
+    <ion-content>
       <AppContentFrame>
         <div v-if="loading" class="empty-state">
           <ion-spinner name="crescent" />
@@ -73,8 +73,16 @@
           </div>
 
           <div v-else-if="isBuyer && agreement.status === 'accepted'" class="action-stack">
-            <ion-button expand="block" :disabled="busy" @click="handlePayDeposit">
+            <ion-button
+              v-if="paymentsEnabled"
+              expand="block"
+              :disabled="busy"
+              @click="handlePayDeposit"
+            >
               {{ busy ? 'Processing...' : `Pay $${agreement.depositAmount} deposit` }}
+            </ion-button>
+            <ion-button v-else expand="block" disabled>
+              Payments coming soon
             </ion-button>
           </div>
 
@@ -129,6 +137,7 @@ import {
   toastController,
 } from '@ionic/vue';
 
+import { isPaymentsEnabled } from '@/common/config/featureFlags';
 import { formatMeetupLocation } from '@/features/meetups/utils/meetupLocation';
 import {
   acceptMeetupProposal,
@@ -152,6 +161,7 @@ const error = ref('');
 const busy = ref(false);
 const agreement = ref<Agreement | null>(null);
 const listing = ref<Listing | null>(null);
+const paymentsEnabled = isPaymentsEnabled();
 
 let unsubscribeAgreement: (() => void) | undefined;
 
@@ -319,6 +329,9 @@ async function handleCancel() {
 }
 
 async function handlePayDeposit() {
+  if (!paymentsEnabled) {
+    return;
+  }
   const user = currentUser.value;
   if (!user || !agreement.value) {
     return;

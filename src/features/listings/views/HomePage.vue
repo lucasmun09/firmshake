@@ -3,26 +3,7 @@
     <AppTopToolbar title="Browse">
       <AppTabRefreshingIndicator :active="showUpdatingIndicator" />
       <ion-toolbar class="app-toolbar-content">
-        <AppContentFrame>
-          <div class="search-filter-row">
-            <button
-              v-if="isMobileSidebar"
-              type="button"
-              class="mobile-filter-toggle"
-              :aria-label="sidebarOpen ? 'Close browse filters' : 'Open browse filters'"
-              :aria-expanded="sidebarOpen"
-              @click="toggleSidebar"
-            >
-              <ion-icon :icon="menuOutline" aria-hidden="true" />
-            </button>
-            <ion-searchbar
-              v-model="draftSearchQuery"
-              class="search-filter-row__search"
-              placeholder="Search listings"
-              :debounce="0"
-            />
-          </div>
-
+        <AppContentFrame class="app-content-frame--flush-y">
           <div v-if="currentUser" class="community-row">
             <ion-segment
               v-model="selectedCommunity"
@@ -47,6 +28,25 @@
               <ion-icon slot="icon-only" :icon="addOutline" />
             </ion-button>
           </div>
+
+          <div class="search-filter-row">
+            <button
+              v-if="isMobileSidebar"
+              type="button"
+              class="mobile-filter-toggle"
+              :aria-label="sidebarOpen ? 'Close browse filters' : 'Open browse filters'"
+              :aria-expanded="sidebarOpen"
+              @click="toggleSidebar"
+            >
+              <ion-icon :icon="menuOutline" aria-hidden="true" />
+            </button>
+            <ion-searchbar
+              v-model="draftSearchQuery"
+              class="search-filter-row__search"
+              placeholder="Search listings"
+              :debounce="0"
+            />
+          </div>
         </AppContentFrame>
       </ion-toolbar>
     </AppTopToolbar>
@@ -61,7 +61,7 @@
       />
     </Teleport>
 
-    <ion-content ref="contentRef" @ionScroll="handleScroll">
+    <ion-content ref="contentRef" class="app-tab-content" @ionScroll="handleScroll">
       <AppContentFrame>
         <div class="browse-layout">
           <Teleport to="body" :disabled="!isMobileSidebar">
@@ -78,17 +78,16 @@
               >
                 <template #root="{ push }">
                   <div class="sidebar-section">
-                    <h2 class="sidebar-heading">Distance</h2>
-                    <BrowseGeoFilter
-                      v-model="draftGeoFilter"
-                      :default-location-radius-miles="effectiveViewMode === 'map' ? BROWSE_MAP_DEFAULT_RADIUS_MILES : undefined"
-                      @apply="onGeoFilterApply"
-                    />
+                    <h2 class="sidebar-heading">View</h2>
+                    <BrowseViewSelector v-model="viewMode" :show-map="bffBrowseEnabled" />
                   </div>
 
                   <div class="sidebar-section">
-                    <h2 class="sidebar-heading">View</h2>
-                    <BrowseViewSelector v-model="viewMode" :show-map="bffBrowseEnabled" />
+                    <h2 class="sidebar-heading">Distance</h2>
+                    <BrowseGeoFilter
+                      v-model="draftGeoFilter"
+                      @apply="onGeoFilterApply"
+                    />
                   </div>
 
                   <div class="sidebar-section">
@@ -125,7 +124,7 @@
                     <h2 class="sidebar-heading">Sort</h2>
                     <ion-select
                       v-model="draftSort"
-                      interface="popover"
+                      :interface="selectInterface"
                       class="sidebar-select"
                       aria-label="Sort listings"
                     >
@@ -174,24 +173,23 @@
 
               <template v-else>
                 <div class="sidebar-section">
-                  <h2 class="sidebar-heading">Distance</h2>
-                  <BrowseGeoFilter
-                    v-model="draftGeoFilter"
-                    :default-location-radius-miles="effectiveViewMode === 'map' ? BROWSE_MAP_DEFAULT_RADIUS_MILES : undefined"
-                    @apply="onGeoFilterApply"
-                  />
+                  <h2 class="sidebar-heading">View</h2>
+                  <BrowseViewSelector v-model="viewMode" :show-map="bffBrowseEnabled" />
                 </div>
 
                 <div class="sidebar-section">
-                  <h2 class="sidebar-heading">View</h2>
-                  <BrowseViewSelector v-model="viewMode" :show-map="bffBrowseEnabled" />
+                  <h2 class="sidebar-heading">Distance</h2>
+                  <BrowseGeoFilter
+                    v-model="draftGeoFilter"
+                    @apply="onGeoFilterApply"
+                  />
                 </div>
 
                 <div class="sidebar-section">
                   <h2 class="sidebar-heading">Category</h2>
                   <ion-select
                     v-model="draftCategory"
-                    interface="popover"
+                    :interface="selectInterface"
                     placeholder="All categories"
                     class="sidebar-select category-select"
                   >
@@ -231,7 +229,7 @@
                   <h2 class="sidebar-heading">Sort</h2>
                   <ion-select
                     v-model="draftSort"
-                    interface="popover"
+                    :interface="selectInterface"
                     class="sidebar-select"
                     aria-label="Sort listings"
                   >
@@ -262,6 +260,8 @@
         <div ref="browseMainRef" class="browse-main">
         <GuestBrowsePromo v-if="showGuestPromo" />
 
+        <BrowseRecentCarousel :visible-slot-count="recentCarouselSlotCount" />
+
         <div v-if="showTopSellButton" class="community-actions">
           <ion-button expand="block" :router-link="sellLink">
             Sell on {{ selectedCommunityName }}
@@ -277,9 +277,11 @@
           v-else-if="effectiveViewMode === 'map'"
           v-model:address-query="mapAddressQuery"
           :listings="mapListings"
+          :server-pin-groups="mapPinGroups"
           :center="mapCenter"
-          :center-radius-miles="BROWSE_MAP_DEFAULT_RADIUS_MILES"
+          :center-radius-miles="mapCenterRadiusMiles"
           :loading="mapLoading"
+          :community-loading="communityMapLoading"
           @bounds-change="onMapBoundsChange"
           @geo-search="onMapGeoSearch"
           @listing-unavailable="onMapListingUnavailable"
@@ -315,7 +317,11 @@
             detail
           >
             <ion-thumbnail slot="start">
-              <AuthenticatedImage :src="listing.imageUrl" :alt="listing.title" />
+              <AuthenticatedImage
+                :src="listing.imageUrl"
+                :alt="listing.title"
+                variant="thumbnail"
+              />
             </ion-thumbnail>
             <ion-label>
               <h2>{{ listing.title }}</h2>
@@ -332,7 +338,7 @@
           />
         </ion-list>
 
-        <div v-if="loadingMore && effectiveViewMode !== 'map'" class="loading-more">
+        <div v-if="loadingMoreVisible && effectiveViewMode !== 'map'" class="loading-more">
           <ion-spinner name="crescent" />
         </div>
 
@@ -340,8 +346,7 @@
           v-if="showEndOfList && !showNoListings && effectiveViewMode !== 'map'"
           :class="showEmpty ? 'empty-state' : 'end-of-list'"
         >
-          <p v-if="showEmpty">You have reached the bottom of the list!</p>
-          <ion-note v-else>You have reached the bottom of the list!</ion-note>
+          <ion-note>You have reached the bottom of the list!</ion-note>
         </div>
 
         <div ref="bottomSentinelRef" class="bottom-sentinel" aria-hidden="true" />
@@ -440,18 +445,21 @@ import {
 import BrowseCardsView from '@/features/listings/components/BrowseCardsView.vue';
 import BrowseGeoFilter from '@/features/listings/components/BrowseGeoFilter.vue';
 import BrowseMapView from '@/features/listings/components/BrowseMapView.vue';
+import BrowseRecentCarousel from '@/features/listings/components/BrowseRecentCarousel.vue';
 import BrowseViewSelector from '@/features/listings/components/BrowseViewSelector.vue';
 import {
   normalizeBrowseViewMode,
   type BrowseViewMode,
 } from '@/features/listings/types/browseViewMode';
 import {
-  BROWSE_MAP_DEFAULT_RADIUS_MILES,
+  BROWSE_MAP_MAX_PREFETCH_PAGES,
   BROWSE_MAP_SEARCH_PAGE_SIZE,
+  resolveMapSearchViewport,
   type MapViewportSearch,
   viewportFromCenterRadius,
   type MapGeoSearchPayload,
 } from '@/features/listings/utils/browseMapView';
+import type { BrowseMapPinGroup } from '@/features/listings/utils/browseMapPinAggregation';
 import {
   clearGeoFilterPrefsIfUserChanged,
   defaultGeoFilterState,
@@ -459,6 +467,7 @@ import {
   saveGeoFilterPrefs,
   type GeoFilterState,
 } from '@/features/listings/services/geoFilterStorage';
+import { scheduleBrowseListingImagePrefetch } from '@/features/listings/utils/browseListingImagePrefetch';
 import { applyBrowseFilters as applyBrowseListingFilters } from '@/features/listings/utils/browseFilters';
 import {
   appendUniqueBrowseListings,
@@ -480,8 +489,9 @@ import MobileFilterNavRow from '@/components/MobileFilterNavRow.vue';
 import MobileFilterPanel from '@/components/MobileFilterPanel.vue';
 import ListingRowSkeleton from '@/components/skeletons/ListingRowSkeleton.vue';
 import GuestBrowsePromo from '@/features/shell/components/GuestBrowsePromo.vue';
+import { useIonSelectInterface } from '@/common/composables/useIonSelectInterface';
 import { useLazyReveal } from '@/common/composables/useLazyReveal';
-import { shouldLoadMoreAtScroll } from '@/common/utils/scrollLoadThreshold';
+import { useMinimumDisplayVisibility } from '@/common/composables/useDebouncedVisibility';
 import {
   appendBrowseListings,
   combinedTrailingSkeletonCount as computeCombinedTrailingSkeletonCount,
@@ -494,12 +504,17 @@ import {
 } from '@/features/listings/utils/browsePaginationUi';
 import {
   applyBrowseSearchPageResult,
-  BROWSE_SEARCH_PREFETCH_PAGES,
+  BROWSE_SEARCH_SCROLL_BUFFER_AHEAD,
   BROWSE_TEXT_SEARCH_PAGE_SIZE,
+  browseSearchInitialPrefetchTarget,
+  browseSearchPagesToMaintainBuffer,
   nextBrowseSearchPagesToPrefetch,
   shouldPrefetchBrowseSearchBuffer,
   shouldShowBrowseLoadMoreSpinner,
+  shouldTriggerBrowseFeedPrefetch,
 } from '@/features/listings/utils/browseSearchPrefetch';
+import { BROWSE_CARDS_REVEAL_PREFETCH_THRESHOLD, BROWSE_SEARCH_DEBOUNCE_MS } from '@/features/listings/utils/browsePaginationConfig';
+import { canSilentlyPrefetchBrowseSearchPage } from '@/features/listings/utils/browsePrefetchGuards';
 import { debugLog, serializeError } from '@/common/debug/debugLog';
 import {
   isFirestorePermissionDenied,
@@ -516,6 +531,7 @@ import {
   getBrowseGridRowCount,
   getBrowseGridRowHeightPx,
 } from '@/features/listings/utils/browseGridLayout';
+import { getRecentCarouselSlotCount } from '@/features/listings/utils/recentCarouselLayout';
 import { LISTINGS_PAGE_SIZE } from '@/features/listings/utils/listingMapper';
 
 function hydrateBrowsePlaceholder(communityId: string, categoryId: string) {
@@ -574,9 +590,16 @@ const bffBrowseEnabled = useBffBrowse();
 
 const listings = ref<Listing[]>(initialBrowse.listings);
 const browseLoadedPool = ref<Listing[]>(initialBrowse.listings);
+scheduleBrowseListingImagePrefetch(initialBrowse.listings);
+
+watch(browseLoadedPool, (pool) => {
+  scheduleBrowseListingImagePrefetch(pool);
+});
 const mapListings = ref<Listing[]>([]);
 const mapListingsPool = ref<Listing[]>([]);
+const mapPinGroups = ref<BrowseMapPinGroup[] | null>(null);
 const mapLoading = ref(false);
+const communityMapLoading = ref(false);
 const mapBounds = ref<MapViewportSearch | null>(null);
 const categories = ref<Category[]>([]);
 const selectedCommunity = ref(loadPersistedBrowseCommunity());
@@ -611,6 +634,7 @@ const initialLoadPending = ref(!initialBrowse.hasPlaceholder);
 const filterApplying = ref(false);
 const refreshing = ref(false);
 const loadingMore = ref(false);
+const loadingMoreVisible = useMinimumDisplayVisibility(loadingMore);
 const error = ref('');
 const hasMore = ref(initialBrowse.hasMore);
 const searchPage = ref(1);
@@ -627,6 +651,14 @@ const atBottom = ref(false);
 
 const cardsGridColumnCount = computed(() =>
   effectiveViewMode.value === 'cards' ? gridColumnCount.value : undefined,
+);
+
+const recentCarouselSlotCount = computed(() =>
+  getRecentCarouselSlotCount(
+    effectiveViewMode.value,
+    gridColumnCount.value,
+    typeof window !== 'undefined' ? window.innerWidth : 1024,
+  ),
 );
 
 const browseFeedPageSize = computed(() =>
@@ -688,6 +720,7 @@ const sidebarOpen = ref(false);
 const isMobileSidebar = ref(readMobileSidebarMode());
 const mobileChromeBottom = ref(0);
 const filterPanelStack = ref<string[]>([]);
+const { selectInterface } = useIonSelectInterface();
 
 const mobileOverlayStyle = computed(() => ({
   top: `${mobileChromeBottom.value}px`,
@@ -744,6 +777,12 @@ const mapCenter = computed(() => {
   };
 });
 
+const mapCenterRadiusMiles = computed(() =>
+  isAppliedGeoActive.value
+    ? appliedGeoFilter.value.radiusMiles
+    : draftGeoFilter.value.radiusMiles,
+);
+
 const hasPendingFilterChanges = computed(
   () =>
     draftSearchQuery.value !== appliedSearchQuery.value ||
@@ -788,6 +827,21 @@ function applyDraftToApplied() {
 function resetBrowseLoadedPool() {
   browseLoadedPool.value = [];
   mapListingsPool.value = [];
+  mapListings.value = [];
+  mapPinGroups.value = null;
+  mapFetchGeneration += 1;
+}
+
+function buildMapLocalCacheKey(uid: string, viewport: MapViewportSearch): string {
+  return buildBrowseLocalMapKey(uid, viewport, buildAppliedLocalCacheParams());
+}
+
+/** Client-side filter for map markers (community, category, price, keyword). Geo is API-scoped via viewport. */
+function applyMapListingFilters(pool: Listing[]): Listing[] {
+  return filterLoadedBrowseListings(pool, {
+    ...buildLocalFilterParams(appliedSearchQuery.value),
+    geo: null,
+  });
 }
 
 function buildLocalFilterParams(query = draftSearchQuery.value): BrowseLocalFilterParams {
@@ -824,7 +878,7 @@ function applyLocalSearchPreview() {
   loading.value = false;
 
   if (mapListingsPool.value.length > 0) {
-    mapListings.value = filterLoadedBrowseListings(mapListingsPool.value, params);
+    mapListings.value = applyMapListingFilters(mapListingsPool.value);
   }
 }
 
@@ -889,6 +943,13 @@ function onGeoFilterApply() {
       locating: false,
     };
     persistAppliedGeoFilter();
+    if (effectiveViewMode.value === 'map') {
+      if (mapBounds.value) {
+        void loadMapListings(mapBounds.value);
+      }
+    } else {
+      void reloadListingsForGeoChange();
+    }
     return;
   }
 
@@ -904,20 +965,30 @@ function onGeoFilterApply() {
   };
   persistAppliedGeoFilter();
 
-  if (effectiveViewMode.value !== 'map') {
+  if (effectiveViewMode.value === 'map') {
+    const viewport = viewportFromCenterRadius(
+      appliedGeoFilter.value.lat!,
+      appliedGeoFilter.value.lng!,
+      appliedGeoFilter.value.radiusMiles,
+    );
+    mapBounds.value = viewport;
+    void loadMapListings(viewport);
     return;
   }
 
-  const viewport = viewportFromCenterRadius(
-    appliedGeoFilter.value.lat!,
-    appliedGeoFilter.value.lng!,
-    appliedGeoFilter.value.radiusMiles,
-  );
-  mapBounds.value = viewport;
-  void loadMapListings(viewport);
+  void reloadListingsForGeoChange();
+}
+
+async function reloadListingsForGeoChange() {
+  resetBrowseLoadedPool();
+  listings.value = [];
+  loading.value = true;
+  invalidateCurrentListingCache();
+  await loadInitialListings({ skipStalePlaceholder: true });
 }
 
 function onMapGeoSearch(payload: MapGeoSearchPayload) {
+  const radiusMiles = draftGeoFilter.value.radiusMiles;
   const nextGeo = {
     ...draftGeoFilter.value,
     enabled: true,
@@ -926,14 +997,14 @@ function onMapGeoSearch(payload: MapGeoSearchPayload) {
     label: payload.label,
     city: payload.city ?? draftGeoFilter.value.city,
     region: payload.region ?? draftGeoFilter.value.region,
-    radiusMiles: payload.radiusMiles,
+    radiusMiles,
     locating: false,
   };
   draftGeoFilter.value = nextGeo;
   appliedGeoFilter.value = { ...nextGeo };
   persistAppliedGeoFilter();
 
-  const viewport = viewportFromCenterRadius(payload.lat, payload.lng, payload.radiusMiles);
+  const viewport = viewportFromCenterRadius(payload.lat, payload.lng, radiusMiles);
   mapBounds.value = viewport;
   void loadMapListings(viewport);
 }
@@ -1023,14 +1094,36 @@ function buildSearchParams(page = 1, forceRefresh?: boolean) {
   return params;
 }
 
-function buildMapSearchParams(viewport: MapViewportSearch, forceRefresh?: boolean) {
+function buildMapSearchParams(viewport: MapViewportSearch, page = 1, forceRefresh?: boolean) {
+  const searchViewport = resolveMapSearchViewport(
+    viewport,
+    isAppliedGeoActive.value
+      ? {
+          lat: appliedGeoFilter.value.lat!,
+          lng: appliedGeoFilter.value.lng!,
+          radiusMiles: appliedGeoFilter.value.radiusMiles,
+        }
+      : null,
+  );
+
+  const base = buildSearchParams(page, forceRefresh);
+
+  if (isAppliedGeoActive.value) {
+    return {
+      ...base,
+      hasLocation: true,
+      page,
+      pageSize: BROWSE_MAP_SEARCH_PAGE_SIZE,
+    };
+  }
+
   return {
-    ...buildSearchParams(1, forceRefresh),
-    lat: viewport.lat,
-    lng: viewport.lng,
-    radiusMiles: viewport.radiusMiles,
+    ...base,
+    lat: searchViewport.lat,
+    lng: searchViewport.lng,
+    radiusMiles: searchViewport.radiusMiles,
     hasLocation: true,
-    page: 1,
+    page,
     pageSize: BROWSE_MAP_SEARCH_PAGE_SIZE,
   };
 }
@@ -1039,12 +1132,23 @@ let mapFetchGeneration = 0;
 
 async function loadMapListings(viewport: MapViewportSearch) {
   if (!bffBrowseEnabled) {
+    communityMapLoading.value = false;
     return;
   }
 
   const generation = ++mapFetchGeneration;
+  const searchViewport = resolveMapSearchViewport(
+    viewport,
+    isAppliedGeoActive.value
+      ? {
+          lat: appliedGeoFilter.value.lat!,
+          lng: appliedGeoFilter.value.lng!,
+          radiusMiles: appliedGeoFilter.value.radiusMiles,
+        }
+      : null,
+  );
   const uid = currentUser.value?.uid ?? getCacheOwnerUid() ?? 'anonymous';
-  const mapCacheKey = buildBrowseLocalMapKey(uid, viewport);
+  const mapCacheKey = buildMapLocalCacheKey(uid, searchViewport);
   const localStale = getStaleBrowseLocalCache(mapCacheKey);
   let hadMapCache = false;
 
@@ -1052,9 +1156,7 @@ async function loadMapListings(viewport: MapViewportSearch) {
     hadMapCache = true;
     const cached = listingsFromCachePayload(localStale);
     mapListingsPool.value = cached;
-    mapListings.value = isTextSearchMode.value
-      ? filterLoadedBrowseListings(cached, buildLocalFilterParams(appliedSearchQuery.value))
-      : cached;
+    mapListings.value = applyMapListingFilters(cached);
     debugLog.debug('browse', 'Map localStorage hit — hydrating viewport', {
       cacheKey: mapCacheKey,
       count: cached.length,
@@ -1064,35 +1166,57 @@ async function loadMapListings(viewport: MapViewportSearch) {
   mapLoading.value = true;
 
   try {
-    const result = await withTransientFirestoreRetry(
-      () => searchBrowseListings(buildMapSearchParams(viewport, hadMapCache)),
-      { context: 'browse-map', user: currentUser.value },
-    );
+    let mergedListings: Listing[] = hadMapCache ? [...mapListingsPool.value] : [];
+    let latestPinGroups: BrowseMapPinGroup[] | null = mapPinGroups.value;
+    let page = 1;
+    let apiHasMore = true;
 
-    if (generation !== mapFetchGeneration) {
-      return;
+    while (apiHasMore && page <= BROWSE_MAP_MAX_PREFETCH_PAGES) {
+      const result = await withTransientFirestoreRetry(
+        () =>
+          searchBrowseListings(
+            buildMapSearchParams(searchViewport, page, hadMapCache && page === 1),
+          ),
+        { context: 'browse-map', user: currentUser.value },
+      );
+
+      if (generation !== mapFetchGeneration) {
+        return;
+      }
+
+      mergedListings = hadMapCache && page === 1
+        ? mergeFreshBrowseResultsOnTop(result.listings, mergedListings)
+        : appendBrowseListings(mergedListings, result.listings);
+      latestPinGroups = result.pinGroups?.length ? result.pinGroups : latestPinGroups;
+
+      apiHasMore = resolveBffBrowseHasMore(
+        result.hasMore,
+        result.listings.length,
+        BROWSE_MAP_SEARCH_PAGE_SIZE,
+      );
+      page += 1;
+
+      if (result.listings.length === 0) {
+        break;
+      }
     }
 
-    const merged = hadMapCache
-      ? mergeFreshBrowseResultsOnTop(result.listings, mapListingsPool.value)
-      : result.listings;
-    mapListingsPool.value = merged;
-    mapListings.value = isTextSearchMode.value
-      ? filterLoadedBrowseListings(merged, buildLocalFilterParams(appliedSearchQuery.value))
-      : merged;
+    mapListingsPool.value = mergedListings;
+    mapListings.value = applyMapListingFilters(mergedListings);
+    mapPinGroups.value = latestPinGroups?.length ? latestPinGroups : null;
 
-    persistBrowseLocalPool(mapCacheKey, merged, {
-      hasMore: result.hasMore,
-      viewport,
+    persistBrowseLocalPool(mapCacheKey, mergedListings, {
+      hasMore: apiHasMore,
+      viewport: searchViewport,
     });
 
     debugLog.debug('browse', 'Map viewport fetch complete', {
-      count: merged.length,
-      freshCount: result.listings.length,
-      radiusMiles: viewport.radiusMiles,
-      lat: viewport.lat,
-      lng: viewport.lng,
-      engine: result.engine,
+      count: mergedListings.length,
+      pagesFetched: page - 1,
+      radiusMiles: searchViewport.radiusMiles,
+      lat: searchViewport.lat,
+      lng: searchViewport.lng,
+      geoActive: isAppliedGeoActive.value,
     });
   } catch (err) {
     if (generation !== mapFetchGeneration) {
@@ -1110,11 +1234,16 @@ async function loadMapListings(viewport: MapViewportSearch) {
   } finally {
     if (generation === mapFetchGeneration) {
       mapLoading.value = false;
+      communityMapLoading.value = false;
     }
   }
 }
 
 function onMapBoundsChange(viewport: MapViewportSearch) {
+  if (isAppliedGeoActive.value) {
+    return;
+  }
+
   mapBounds.value = viewport;
   if (effectiveViewMode.value !== 'map') {
     return;
@@ -1125,6 +1254,7 @@ function onMapBoundsChange(viewport: MapViewportSearch) {
 function onMapListingUnavailable(listingId: string) {
   mapListingsPool.value = mapListingsPool.value.filter((listing) => listing.id !== listingId);
   mapListings.value = mapListings.value.filter((listing) => listing.id !== listingId);
+  mapPinGroups.value = null;
 }
 
 function refreshMapListingsIfActive() {
@@ -1188,6 +1318,7 @@ const {
 } = useLazyReveal(listings, {
   contentRef,
   loading,
+  minSkeletonMs: 200,
   gridColumnCount: cardsGridColumnCount,
   gridRowCount: computed(() =>
     effectiveViewMode.value === 'cards' ? gridRowCount.value : undefined,
@@ -1467,10 +1598,10 @@ async function loadInitialListings(options?: {
         : result.listings;
 
       listings.value = merged;
-      browseLoadedPool.value = merged;
+      browseLoadedPool.value = listings.value;
       hasMore.value = resolveBffBrowseHasMore(
         result.hasMore,
-        merged.length,
+        result.listings.length,
         browseFeedPageSize.value,
       );
       searchPage.value = 1;
@@ -1634,6 +1765,30 @@ function logBrowsePaginationSkip(reason: string): void {
   logBrowsePagination('loadMore skipped', { reason });
 }
 
+function shouldPrefetchBrowseFeedNow(
+  scrollEl: Pick<HTMLElement, 'scrollTop' | 'scrollHeight' | 'clientHeight'>,
+): boolean {
+  const threshold =
+    effectiveViewMode.value === 'cards'
+      ? BROWSE_CARDS_REVEAL_PREFETCH_THRESHOLD
+      : undefined;
+
+  return shouldTriggerBrowseFeedPrefetch(
+    scrollEl,
+    visibleItems.value.length,
+    listings.value.length,
+    threshold,
+  );
+}
+
+function browseLoadMoreSpinnerContext() {
+  return {
+    visibleCount: visibleItems.value.length,
+    fetchedCount: listings.value.length,
+    hasMore: hasMore.value,
+  };
+}
+
 function clearBffSearchPageFetches(): void {
   bffSearchPageFetches.clear();
 }
@@ -1659,8 +1814,24 @@ async function fetchBffSearchPage(
       return true;
     }
 
+    if (
+      !options.showLoadingMore &&
+      !canSilentlyPrefetchBrowseSearchPage(
+        searchPage.value,
+        page,
+        isTextSearchMode.value,
+      )
+    ) {
+      logBrowsePagination('prefetch page skipped — beyond buffer depth', {
+        page,
+        loadedPage: searchPage.value,
+      });
+      return false;
+    }
+
     const listingCountBefore = listings.value.length;
-    const showSpinner = options.showLoadingMore && shouldShowBrowseLoadMoreSpinner(page);
+    const showSpinner =
+      options.showLoadingMore && shouldShowBrowseLoadMoreSpinner(browseLoadMoreSpinnerContext());
 
     if (showSpinner) {
       loadingMore.value = true;
@@ -1735,7 +1906,10 @@ async function fetchBffSearchPage(
   }
 }
 
-async function prefetchBrowseSearchBuffer(generation: number): Promise<void> {
+async function prefetchBrowseSearchBuffer(
+  generation: number,
+  targetPages = browseSearchInitialPrefetchTarget(isTextSearchMode.value),
+): Promise<void> {
   if (!(bffBrowseEnabled || isApiSearchMode.value)) {
     return;
   }
@@ -1743,7 +1917,7 @@ async function prefetchBrowseSearchBuffer(generation: number): Promise<void> {
   const pages = nextBrowseSearchPagesToPrefetch(
     searchPage.value,
     hasMore.value,
-    BROWSE_SEARCH_PREFETCH_PAGES,
+    targetPages,
   );
   if (pages.length === 0) {
     return;
@@ -1752,7 +1926,7 @@ async function prefetchBrowseSearchBuffer(generation: number): Promise<void> {
   logBrowsePagination('prefetch buffer start', {
     pages,
     loadedPage: searchPage.value,
-    targetPages: BROWSE_SEARCH_PREFETCH_PAGES,
+    targetPages,
   });
 
   for (const page of pages) {
@@ -1779,9 +1953,156 @@ async function prefetchBrowseSearchBuffer(generation: number): Promise<void> {
       listingCount: listings.value.length,
       hasMore: hasMore.value,
     });
+    await maintainBrowseSearchScrollBuffer(generation);
     await nextTick(() => {
       void updateScrollState();
     });
+  }
+}
+
+async function maintainBrowseSearchScrollBuffer(generation?: number): Promise<void> {
+  if (!(bffBrowseEnabled || isApiSearchMode.value) || !hasMore.value) {
+    return;
+  }
+
+  const pages = browseSearchPagesToMaintainBuffer(
+    searchPage.value,
+    hasMore.value,
+    BROWSE_SEARCH_SCROLL_BUFFER_AHEAD,
+  );
+  if (pages.length === 0) {
+    return;
+  }
+
+  logBrowsePagination('maintain scroll buffer', {
+    pages,
+    loadedPage: searchPage.value,
+    pagesAhead: BROWSE_SEARCH_SCROLL_BUFFER_AHEAD,
+  });
+
+  for (const page of pages) {
+    if (generation != null && generation !== searchFetchGeneration) {
+      return;
+    }
+    if (!hasMore.value) {
+      break;
+    }
+
+    await fetchBffSearchPage(page, {
+      showLoadingMore: false,
+      generation,
+    });
+  }
+}
+
+async function fetchFirestoreFeedPage(options: { showLoadingMore: boolean }): Promise<boolean> {
+  const listingCountBefore = listings.value.length;
+  const showSpinner =
+    options.showLoadingMore && shouldShowBrowseLoadMoreSpinner(browseLoadMoreSpinnerContext());
+
+  if (showSpinner) {
+    loadingMore.value = true;
+  }
+
+  try {
+    const cursor = await resolveFeedPaginationCursor();
+    if (!cursor) {
+      debugLog.warn('browse', 'Pagination cursor missing — retrying feed from last listing', {
+        communityId: selectedCommunity.value,
+        listingCount: listings.value.length,
+        lastListingId: listings.value.at(-1)?.id ?? null,
+      });
+      logBrowsePagination('loadMore aborted — cursor missing', {
+        listingCount: listings.value.length,
+        lastListingId: listings.value.at(-1)?.id ?? null,
+      });
+      return false;
+    }
+
+    const page = await fetchBrowsePage(selectedCommunity.value, {
+      categoryId: appliedCategory.value || undefined,
+      startAfterDoc: cursor,
+      pageSize: browseFeedPageSize.value,
+    });
+    const filtered = applyBrowseFilters(page.listings);
+    const appended = appendBrowseListings(listings.value, filtered);
+    listings.value = appended;
+    if (!isTextSearchMode.value) {
+      browseLoadedPool.value = appendUniqueBrowseListings(browseLoadedPool.value, filtered);
+    }
+    lastFeedDoc.value = page.lastDoc;
+    hasMore.value = page.hasMore;
+    persistCurrentBrowseLocalCache(listings.value);
+    invalidateCurrentListingCache();
+    logBrowsePagination(
+      showSpinner ? 'loadMore complete (firestore)' : 'prefetch page complete (firestore)',
+      {
+        fetched: filtered.length,
+        appended: appended.length - listingCountBefore,
+        total: appended.length,
+        hasMore: hasMore.value,
+        hasCursor: Boolean(page.lastDoc),
+        prefetchBuffer: !showSpinner,
+      },
+    );
+    return true;
+  } catch (err) {
+    debugLog.warn('browse', 'fetchFirestoreFeedPage failed', {
+      communityId: selectedCommunity.value,
+      error: serializeError(err),
+    });
+    logBrowsePagination('page fetch failed', {
+      communityId: selectedCommunity.value,
+      error: serializeError(err),
+    });
+    return false;
+  } finally {
+    if (showSpinner) {
+      loadingMore.value = false;
+    }
+  }
+}
+
+function canPrefetchBrowseFeed(): boolean {
+  return (
+    effectiveViewMode.value !== 'map' &&
+    hasMore.value &&
+    !loading.value &&
+    !refreshing.value &&
+    !initialLoadPending.value &&
+    !filterApplying.value &&
+    listings.value.length > 0
+  );
+}
+
+async function ensureBrowseFeedBuffer(): Promise<void> {
+  if (!canPrefetchBrowseFeed()) {
+    return;
+  }
+
+  const useBffSearch = bffBrowseEnabled || isApiSearchMode.value;
+  if (!useBffSearch && (loadMoreLock || loadingMore.value)) {
+    return;
+  }
+
+  const caughtUp =
+    allItemsRevealed.value && visibleItems.value.length >= listings.value.length;
+  const showCaughtUpSpinner = caughtUp && hasMore.value;
+
+  if (showCaughtUpSpinner) {
+    loadingMore.value = true;
+  }
+
+  try {
+    if (useBffSearch) {
+      await maintainBrowseSearchScrollBuffer(searchFetchGeneration);
+    } else {
+      await fetchFirestoreFeedPage({ showLoadingMore: false });
+    }
+  } finally {
+    if (showCaughtUpSpinner) {
+      loadingMore.value = false;
+    }
   }
 }
 
@@ -1823,9 +2144,6 @@ async function loadMoreListings() {
   loadMoreLock = true;
   const listingCountBefore = listings.value.length;
   const useBffSearch = bffBrowseEnabled || isApiSearchMode.value;
-  if (!useBffSearch) {
-    loadingMore.value = true;
-  }
 
   try {
     logBrowsePagination('loadMore start', {
@@ -1839,46 +2157,11 @@ async function loadMoreListings() {
     if (useBffSearch) {
       const nextPage = searchPage.value + 1;
       await fetchBffSearchPage(nextPage, {
-        showLoadingMore: shouldShowBrowseLoadMoreSpinner(nextPage),
+        showLoadingMore: true,
         generation: searchFetchGeneration,
       });
     } else {
-      const cursor = await resolveFeedPaginationCursor();
-      if (!cursor) {
-        debugLog.warn('browse', 'Pagination cursor missing — retrying feed from last listing', {
-          communityId: selectedCommunity.value,
-          listingCount: listings.value.length,
-          lastListingId: listings.value.at(-1)?.id ?? null,
-        });
-        logBrowsePagination('loadMore aborted — cursor missing', {
-          listingCount: listings.value.length,
-          lastListingId: listings.value.at(-1)?.id ?? null,
-        });
-        return;
-      }
-
-      const page = await fetchBrowsePage(selectedCommunity.value, {
-        categoryId: appliedCategory.value || undefined,
-        startAfterDoc: cursor,
-        pageSize: browseFeedPageSize.value,
-      });
-      const filtered = applyBrowseFilters(page.listings);
-      const appended = appendBrowseListings(listings.value, filtered);
-      listings.value = appended;
-      if (!isTextSearchMode.value) {
-        browseLoadedPool.value = appendUniqueBrowseListings(browseLoadedPool.value, filtered);
-      }
-      lastFeedDoc.value = page.lastDoc;
-      hasMore.value = page.hasMore;
-      persistCurrentBrowseLocalCache(listings.value);
-      invalidateCurrentListingCache();
-      logBrowsePagination('loadMore complete (firestore)', {
-        fetched: filtered.length,
-        appended: appended.length - listingCountBefore,
-        total: appended.length,
-        hasMore: hasMore.value,
-        hasCursor: Boolean(page.lastDoc),
-      });
+      await fetchFirestoreFeedPage({ showLoadingMore: true });
     }
   } catch (err) {
     debugLog.warn('browse', 'loadMoreListings failed', {
@@ -1890,9 +2173,6 @@ async function loadMoreListings() {
       error: serializeError(err),
     });
   } finally {
-    if (!useBffSearch) {
-      loadingMore.value = false;
-    }
     loadMoreLock = false;
     await nextTick(() => {
       void updateScrollState();
@@ -1908,6 +2188,9 @@ function onCommunityChange(event: CustomEvent) {
   selectedCommunity.value = event.detail.value;
   persistBrowseCommunity(selectedCommunity.value);
   resetBrowseLoadedPool();
+  if (effectiveViewMode.value === 'map') {
+    communityMapLoading.value = true;
+  }
   reloadListings();
 }
 
@@ -1946,7 +2229,6 @@ function updateMobileChromeBottom() {
   });
 }
 
-const SEARCH_DEBOUNCE_MS = 250;
 let searchDebounceTimer: ReturnType<typeof setTimeout> | undefined;
 let searchFetchGeneration = 0;
 
@@ -2005,9 +2287,9 @@ async function updateScrollState() {
     !loadingMore.value &&
     listings.value.length > 0
   ) {
-    void loadMoreListings();
-  } else if (hasMore.value && shouldLoadMoreAtScroll(scrollEl)) {
-    void loadMoreListings();
+    void ensureBrowseFeedBuffer();
+  } else if (hasMore.value && shouldPrefetchBrowseFeedNow(scrollEl)) {
+    void ensureBrowseFeedBuffer();
   }
 }
 
@@ -2024,12 +2306,27 @@ function setupBottomObserver() {
       const visible = entries.some((entry) => entry.isIntersecting);
       atBottom.value = visible;
       if (visible) {
-        void loadMoreListings();
+        void ensureBrowseFeedBuffer();
+        if (
+          shouldShowBrowseLoadMoreSpinner(browseLoadMoreSpinnerContext()) &&
+          !isLoadMoreBlocked({
+            feedHasMore: hasMore.value,
+            loadingMore: loadingMore.value,
+            loading: loading.value,
+            refreshing: refreshing.value,
+            initialLoadPending: initialLoadPending.value,
+            filterApplying: filterApplying.value,
+            loadMoreLock,
+          })
+        ) {
+          void loadMoreListings();
+        }
       }
     },
     {
       root: null,
       threshold: 0.01,
+      rootMargin: '0px 0px 200% 0px',
     },
   );
 
@@ -2050,8 +2347,8 @@ async function handleScroll() {
   atBottom.value =
     scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - 16;
 
-  if (hasMore.value && shouldLoadMoreAtScroll(scrollEl)) {
-    void loadMoreListings();
+  if (hasMore.value && shouldPrefetchBrowseFeedNow(scrollEl)) {
+    void ensureBrowseFeedBuffer();
   }
 }
 
@@ -2060,6 +2357,7 @@ watch(viewMode, (mode) => {
   if (normalizeBrowseViewMode(mode, bffBrowseEnabled) !== 'map') {
     mapFetchGeneration += 1;
     mapLoading.value = false;
+    communityMapLoading.value = false;
   }
 });
 
@@ -2071,7 +2369,7 @@ watch(draftSearchQuery, () => {
   }
   searchDebounceTimer = setTimeout(() => {
     void applyDebouncedSearch();
-  }, SEARCH_DEBOUNCE_MS);
+  }, BROWSE_SEARCH_DEBOUNCE_MS);
 });
 
 watch(sidebarOpen, (open) => {
@@ -2160,6 +2458,12 @@ watch(selectedCommunity, (communityId) => {
   persistBrowseCommunity(communityId);
 });
 
+watch([allItemsRevealed, hasMore, () => listings.value.length], () => {
+  if (allItemsRevealed.value && hasMore.value && !loading.value && !refreshing.value) {
+    void ensureBrowseFeedBuffer();
+  }
+});
+
 watch([showSkeletons, () => visibleItems.value.length, () => listings.value.length], () => {
   void nextTick(() => {
     void updateBrowseGridLayout();
@@ -2168,8 +2472,12 @@ watch([showSkeletons, () => visibleItems.value.length, () => listings.value.leng
 });
 
 watch(effectiveViewMode, (mode) => {
-  if (normalizeBrowseViewMode(mode, bffBrowseEnabled) === 'cards') {
+  const normalized = normalizeBrowseViewMode(mode, bffBrowseEnabled);
+  if (normalized === 'cards') {
     void nextTick(() => updateBrowseGridLayout());
+  }
+  if (normalized === 'map') {
+    refreshMapListingsIfActive();
   }
 });
 
@@ -2206,13 +2514,13 @@ function communityLabel(communityIds: string[]): string {
 .browse-sidebar {
   flex-shrink: 0;
   width: 10.5rem;
-  padding: 0.75rem 0.65rem;
-  border-right: 1px solid var(--ion-color-step-150, rgba(255, 255, 255, 0.12));
-  background: var(--ion-background-color, #121212);
+  padding: var(--fs-sidebar-inset);
+  border-right: 1px solid var(--ion-color-step-150);
+  background: var(--ion-background-color);
 }
 
 .sidebar-section + .sidebar-section {
-  margin-top: 1.25rem;
+  margin-top: var(--fs-section-gap);
 }
 
 .sidebar-heading {
@@ -2283,10 +2591,14 @@ function communityLabel(communityIds: string[]): string {
   gap: 0.25rem;
 }
 
+.community-row + .search-filter-row {
+  margin-top: var(--fs-space-xs);
+}
+
 .search-filter-row {
   display: flex;
   align-items: center;
-  gap: 0.15rem;
+  gap: var(--fs-space-xs);
 }
 
 .search-filter-row__search {
@@ -2365,14 +2677,14 @@ function communityLabel(communityIds: string[]): string {
   padding: 0.45rem;
   border: none;
   background: transparent;
-  color: var(--ion-text-color, #fff);
+  color: var(--ion-text-color);
   font-size: 1.45rem;
   line-height: 1;
   cursor: pointer;
 }
 
 .mobile-filter-toggle:focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.85);
+  outline: 2px solid var(--fs-focus-outline-color);
   outline-offset: 2px;
 }
 
@@ -2406,7 +2718,6 @@ function communityLabel(communityIds: string[]): string {
 @media (min-width: 768px) {
   .browse-sidebar {
     width: 12.5rem;
-    padding: 1rem 0.85rem;
   }
 }
 </style>

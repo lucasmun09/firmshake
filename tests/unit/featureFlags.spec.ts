@@ -93,4 +93,27 @@ describe('featureFlags', () => {
     const { useBffInbox } = await loadFlags({ VITE_USE_BFF_INBOX: 'false' });
     expect(useBffInbox()).toBe(false);
   });
+
+  it('isPaymentsEnabled defaults to true when unset', async () => {
+    const { isPaymentsEnabled } = await loadFlags({});
+    expect(isPaymentsEnabled()).toBe(true);
+  });
+
+  it('isPaymentsEnabled returns false when explicitly disabled', async () => {
+    const { isPaymentsEnabled } = await loadFlags({ VITE_PAYMENTS_ENABLED: 'false' });
+    expect(isPaymentsEnabled()).toBe(false);
+  });
+
+  it('isPaymentsEnabled returns true when explicitly enabled', async () => {
+    const { isPaymentsEnabled } = await loadFlags({ VITE_PAYMENTS_ENABLED: 'true' });
+    expect(isPaymentsEnabled()).toBe(true);
+  });
+
+  it('isPaymentsEnabled prefers VITE_STRIPE_PAYMENTS_ENABLED alias', async () => {
+    const { isPaymentsEnabled } = await loadFlags({
+      VITE_PAYMENTS_ENABLED: 'true',
+      VITE_STRIPE_PAYMENTS_ENABLED: 'false',
+    });
+    expect(isPaymentsEnabled()).toBe(false);
+  });
 });

@@ -20,6 +20,7 @@ describe('resolveRouteTitle', () => {
     expect(resolveRouteTitle({ name: 'ListingDetail', path: '/listing/abc', meta: {} } as never)).toBe('Listing');
     expect(resolveRouteTitle({ name: 'BlockedUsers', path: '/blockedusers', meta: {} } as never)).toBe('Blocked Users');
     expect(resolveRouteTitle({ name: 'Profile', path: '/tabs/profile', meta: {} } as never)).toBe('Settings');
+    expect(resolveRouteTitle({ name: 'SavedListings', path: '/tabs/savedlistings', meta: {} } as never)).toBe('Saved');
   });
 
   it('prefers meta.title when provided', () => {

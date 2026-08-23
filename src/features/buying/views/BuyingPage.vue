@@ -4,7 +4,7 @@
       <AppTabRefreshingIndicator :active="refreshing" />
     </AppTopToolbar>
 
-    <ion-content ref="contentRef" @ionScroll="onScroll">
+    <ion-content ref="contentRef" class="app-tab-content" @ionScroll="onScroll">
       <AppContentFrame>
         <div v-if="error" class="empty-state">
           <p>{{ error }}</p>
@@ -31,6 +31,7 @@
                 <AuthenticatedImage
                   :src="thread.listingImageUrl"
                   :alt="thread.listingTitle"
+                  variant="thumbnail"
                 />
               </ion-thumbnail>
               <ion-label>
@@ -80,6 +81,7 @@
                   <AuthenticatedImage
                     :src="thread.listingImageUrl"
                     :alt="thread.listingTitle"
+                    variant="thumbnail"
                   />
                 </ion-thumbnail>
                 <ion-label>

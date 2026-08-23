@@ -2,7 +2,7 @@
   <ion-page>
     <AppTopToolbar title="Blocked Users" show-back-button back-href="/tabs/profile" />
 
-    <ion-content class="ion-padding">
+    <ion-content>
       <AppContentFrame>
         <div v-if="loading" class="centered">
           <ion-spinner name="crescent" />

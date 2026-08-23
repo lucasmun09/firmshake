@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DEFAULT_SCROLL_LOAD_THRESHOLD,
+  SCROLL_REVEAL_THRESHOLD,
   scrollProgress,
   shouldLoadMoreAtScroll,
 } from '@/common/utils/scrollLoadThreshold';
@@ -24,7 +25,7 @@ describe('scrollLoadThreshold', () => {
     expect(scrollProgress(mockScrollEl(0, 600, 800))).toBe(1);
   });
 
-  it('triggers load at 75% of full list scroll distance', () => {
+  it('triggers lazy reveal at 75% of full list scroll distance', () => {
     const el = mockScrollEl(0, 5000, 800);
     const scrollable = el.scrollHeight - el.clientHeight;
 
@@ -40,8 +41,15 @@ describe('scrollLoadThreshold', () => {
 
   it('does not use viewport-height remaining distance (long lists)', () => {
     const el = mockScrollEl(3150, 5000, 800);
+    const scrollable = el.scrollHeight - el.clientHeight;
     const remaining = el.scrollHeight - el.scrollTop - el.clientHeight;
     expect(remaining).toBeGreaterThan(el.clientHeight * 0.75);
+    expect(el.scrollTop / scrollable).toBeGreaterThanOrEqual(0.75);
     expect(shouldLoadMoreAtScroll(el, DEFAULT_SCROLL_LOAD_THRESHOLD)).toBe(true);
+  });
+
+  it('exports aligned reveal threshold constants', () => {
+    expect(SCROLL_REVEAL_THRESHOLD).toBe(0.75);
+    expect(DEFAULT_SCROLL_LOAD_THRESHOLD).toBe(SCROLL_REVEAL_THRESHOLD);
   });
 });

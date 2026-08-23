@@ -103,6 +103,12 @@ const routes: Array<RouteRecordRaw> = [
         redirect: '/tabs/home',
       },
       {
+        path: 'home/recent',
+        name: 'RecentListings',
+        component: () => import('@/features/listings/views/RecentListingsPage.vue'),
+        meta: { guestAccessible: true },
+      },
+      {
         path: 'home',
         name: 'Home',
         component: () => import('@/features/listings/views/HomePage.vue'),
@@ -185,6 +191,12 @@ const routes: Array<RouteRecordRaw> = [
         meta: { requiresAuth: true, skipAuthFlow: true },
       },
       {
+        path: 'savedlistings',
+        name: 'SavedListings',
+        component: () => import('@/features/listings/views/SavedListingsPage.vue'),
+        meta: { guestAccessible: true },
+      },
+      {
         path: 'blockedusers',
         name: 'BlockedUsers',
         component: () => import('@/features/profile/views/BlockedUsersPage.vue'),
@@ -195,6 +207,14 @@ const routes: Array<RouteRecordRaw> = [
   {
     path: '/communities/create',
     redirect: '/tabs/communities/create',
+  },
+  {
+    path: '/recent-listings',
+    redirect: '/tabs/home/recent',
+  },
+  {
+    path: '/saved-listings',
+    redirect: '/tabs/savedlistings',
   },
   {
     path: '/blockedusers',

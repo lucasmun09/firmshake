@@ -9,12 +9,17 @@ import {
   invalidateCachedNamespace,
   setCached,
 } from '@/common/services/responseCache';
+import {
+  listingSummaryToListing,
+  summarizeListings,
+  type ListingSummary,
+} from '@/features/listings/utils/listingSummary';
 import type { Listing } from '@/types';
 
 const BROWSE_NAMESPACE = 'browse-feed';
 
 interface StoredBrowsePage {
-  listings: Listing[];
+  listings: ListingSummary[];
   hasMore: boolean;
 }
 
@@ -24,12 +29,13 @@ export interface CachedBrowsePage {
   lastDoc: DocumentSnapshot | null;
 }
 
-function reviveListing(listing: Listing): Listing {
+function reviveSummary(summary: ListingSummary): Listing {
+  const listing = listingSummaryToListing(summary);
   const createdAt =
-    listing.createdAt instanceof Date
-      ? listing.createdAt
-      : listing.createdAt
-        ? new Date(listing.createdAt as unknown as string)
+    summary.createdAt instanceof Date
+      ? summary.createdAt
+      : summary.createdAt
+        ? new Date(summary.createdAt as unknown as string)
         : undefined;
 
   return {
@@ -40,7 +46,7 @@ function reviveListing(listing: Listing): Listing {
 
 function toStoredPage(page: FeedPageResult): StoredBrowsePage {
   return {
-    listings: page.listings,
+    listings: summarizeListings(page.listings),
     hasMore: page.hasMore,
   };
 }
@@ -64,7 +70,7 @@ export function getCachedBrowsePage(key: string): CachedBrowsePage | null {
   }
 
   return {
-    listings: fresh.listings.map(reviveListing),
+    listings: fresh.listings.map(reviveSummary),
     hasMore: fresh.hasMore,
     lastDoc: null,
   };
@@ -77,7 +83,7 @@ export function getStaleBrowsePage(key: string): CachedBrowsePage | null {
   }
 
   return {
-    listings: stale.listings.map(reviveListing),
+    listings: stale.listings.map(reviveSummary),
     hasMore: stale.hasMore,
     lastDoc: null,
   };

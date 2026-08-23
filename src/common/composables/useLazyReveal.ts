@@ -1,8 +1,10 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Ref } from 'vue';
 
-import { shouldLoadMoreAtScroll } from '@/common/utils/scrollLoadThreshold';
 import {
-  incompleteRowSlots,
+  SCROLL_REVEAL_THRESHOLD,
+  shouldLoadMoreAtScroll,
+} from '@/common/utils/scrollLoadThreshold';
+import {
   roundUpToMultiple,
 } from '@/features/listings/utils/browseGridLayout';
 
@@ -21,6 +23,10 @@ interface LazyRevealOptions {
 
 const DEFAULT_MIN_SKELETON_MS = 500;
 const SCROLLABLE_THRESHOLD_PX = 8;
+const LIST_INITIAL_BATCH_MULTIPLIER = 3;
+const LIST_REVEAL_STEP_DIVISOR = 2;
+/** Cards grid: paint two viewport pages initially (dense grid vs list rows). */
+const GRID_INITIAL_BATCH_MULTIPLIER = 2;
 
 export function useLazyReveal<T>(items: Ref<T[]>, options: LazyRevealOptions = {}) {
   const itemsPerScreen = ref(6);
@@ -71,10 +77,10 @@ export function useLazyReveal<T>(items: Ref<T[]>, options: LazyRevealOptions = {
   const batchSize = computed(() => {
     const pageSize = gridPageSize();
     if (pageSize > 0) {
-      return pageSize;
+      return pageSize * GRID_INITIAL_BATCH_MULTIPLIER;
     }
 
-    return itemsPerScreen.value * 2;
+    return itemsPerScreen.value * LIST_INITIAL_BATCH_MULTIPLIER;
   });
 
   const loadMoreStep = computed(() => {
@@ -83,7 +89,7 @@ export function useLazyReveal<T>(items: Ref<T[]>, options: LazyRevealOptions = {
       return pageSize;
     }
 
-    return itemsPerScreen.value;
+    return Math.max(3, Math.ceil(itemsPerScreen.value / LIST_REVEAL_STEP_DIVISOR));
   });
   const skeletonCount = computed(() => batchSize.value);
 
@@ -205,19 +211,12 @@ export function useLazyReveal<T>(items: Ref<T[]>, options: LazyRevealOptions = {
       return 0;
     }
 
-    const remaining = items.value.length - visibleCount.value;
-    const columns = gridColumns();
-    if (columns > 0) {
-      const incomplete = incompleteRowSlots(visibleCount.value, columns);
-      if (incomplete > 0) {
-        return Math.min(incomplete, remaining);
-      }
-
-      const pageSize = gridPageSize();
-      const previewRows = pageSize > 0 ? Math.max(1, Math.min(gridRows(), 2)) : 2;
-      return Math.min(columns * previewRows, remaining);
+    // Cards grid: never show placeholder tiles for in-memory listings — reveal on scroll instead.
+    if (gridColumns() > 0) {
+      return 0;
     }
 
+    const remaining = items.value.length - visibleCount.value;
     return Math.min(itemsPerScreen.value, remaining);
   });
 
@@ -308,7 +307,7 @@ export function useLazyReveal<T>(items: Ref<T[]>, options: LazyRevealOptions = {
     }
 
     const scrollEl = await ionContent.$el.getScrollElement();
-    if (shouldLoadMoreAtScroll(scrollEl)) {
+    if (shouldLoadMoreAtScroll(scrollEl, SCROLL_REVEAL_THRESHOLD)) {
       loadMore();
     }
   }

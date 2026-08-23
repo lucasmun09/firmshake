@@ -8,7 +8,7 @@ API-specific milestones are tracked in **firmshake-api**.
 - [x] Flask API in separate **firmshake-api** repo
 - [x] Project docs and env templates
 - [ ] Firebase project created and config added to `.env.local`
-- [ ] `ionic cap add ios` and `ionic cap add android`
+- [x] `ionic cap add ios` and `ionic cap add android` (`ios/` + `android/` via Capacitor 8.4)
 
 ## Phase 1 — Login (current)
 

@@ -6,7 +6,7 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content class="ion-padding">
+    <ion-content>
       <AppContentFrame v-if="phase === 'verifying'" class="center-state">
         <ion-spinner name="crescent" />
         <p>Verifying your link...</p>

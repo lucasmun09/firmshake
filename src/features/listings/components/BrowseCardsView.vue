@@ -1,15 +1,22 @@
 <template>
   <div class="browse-cards-view">
-    <RouterLink
+    <article
       v-for="listing in listings"
       :key="listing.id"
-      :to="listingDetailPath(listing.id)"
       class="browse-card"
+      @click="onCardClick(listing)"
+      @dblclick.prevent.stop="onCardDoubleClick(listing)"
     >
       <div class="browse-card__media">
+        <ListingBookmarkButton
+          class="browse-card__bookmark"
+          :saved="savedIds.has(listing.id)"
+          @toggle="onBookmarkToggle(listing)"
+        />
         <AuthenticatedImage
           :src="listing.imageUrl"
           :alt="listing.title"
+          variant="thumbnail"
           class="browse-card__image"
         />
         <div class="browse-card__overlay">
@@ -21,7 +28,7 @@
           </p>
         </div>
       </div>
-    </RouterLink>
+    </article>
     <BrowseCardSkeleton
       v-for="index in trailingSkeletonCount"
       :key="`card-trailing-${index}`"
@@ -30,21 +37,67 @@
 </template>
 
 <script setup lang="ts">
-import { RouterLink } from 'vue-router';
+import { computed } from 'vue';
+import { useRouter } from 'vue-router';
 
 import AuthenticatedImage from '@/components/AuthenticatedImage.vue';
 import BrowseCardSkeleton from '@/components/skeletons/BrowseCardSkeleton.vue';
+import ListingBookmarkButton from '@/features/listings/components/ListingBookmarkButton.vue';
+import {
+  resolveListingPrefsUid,
+  savedListingsRevision,
+  useListingBookmark,
+} from '@/features/listings/composables/useListingBookmark';
+import { getSavedListings } from '@/features/listings/services/savedListings';
 import { listingDetailPath } from '@/features/listings/utils/browseMapView';
-import { MEETUP_DEPOSIT_AMOUNT, type Listing } from '@/types';
+import { MEETUP_DEPOSIT_AMOUNT, type ListingSummary } from '@/types';
 import { formatPrice } from '@/utils/currency';
 
 defineProps<{
-  listings: Listing[];
+  listings: ListingSummary[];
   trailingSkeletonCount?: number;
 }>();
 
+const router = useRouter();
+const uid = computed(() => resolveListingPrefsUid());
+const savedIds = computed(() => {
+  savedListingsRevision.value;
+  return new Set(getSavedListings(uid.value).map((entry) => entry.id));
+});
+
+let clickTimer: ReturnType<typeof setTimeout> | null = null;
+
 function formatDepositAmount(): string {
   return `$${MEETUP_DEPOSIT_AMOUNT} deposit`;
+}
+
+const { toggleBookmark } = useListingBookmark(() => '');
+
+function onCardClick(listing: ListingSummary) {
+  if (clickTimer) {
+    clearTimeout(clickTimer);
+  }
+
+  clickTimer = setTimeout(() => {
+    void router.push(listingDetailPath(listing.id));
+    clickTimer = null;
+  }, 250);
+}
+
+async function onBookmarkToggle(listing: ListingSummary) {
+  if (clickTimer) {
+    clearTimeout(clickTimer);
+    clickTimer = null;
+  }
+  await toggleBookmark(listing);
+}
+
+async function onCardDoubleClick(listing: ListingSummary) {
+  if (clickTimer) {
+    clearTimeout(clickTimer);
+    clickTimer = null;
+  }
+  await toggleBookmark(listing);
 }
 </script>
 
@@ -52,21 +105,19 @@ function formatDepositAmount(): string {
 .browse-cards-view {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 9.5rem), 1fr));
-  gap: 0.65rem;
-  padding: 0.25rem 0 0.5rem;
+  gap: var(--fs-card-gap);
+  padding: var(--fs-space-xs) 0 var(--fs-space-sm);
 }
 
 @media (min-width: 480px) {
   .browse-cards-view {
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 10.5rem), 1fr));
-    gap: 0.75rem;
   }
 }
 
 @media (min-width: 768px) {
   .browse-cards-view {
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 11.5rem), 1fr));
-    gap: 0.85rem;
   }
 }
 
@@ -85,6 +136,7 @@ function formatDepositAmount(): string {
   background: var(--ion-color-step-50, rgba(255, 255, 255, 0.04));
   border: 1px solid var(--ion-color-step-150, rgba(255, 255, 255, 0.12));
   transition: transform 0.15s ease, box-shadow 0.15s ease;
+  cursor: pointer;
 }
 
 .browse-card:hover,
@@ -93,16 +145,18 @@ function formatDepositAmount(): string {
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
 }
 
-.browse-card:focus-visible {
-  outline: 2px solid var(--ion-color-primary, #3880ff);
-  outline-offset: 2px;
-}
-
 .browse-card__media {
   position: relative;
   width: 100%;
   aspect-ratio: 1 / 1;
   overflow: hidden;
+}
+
+.browse-card__bookmark {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  z-index: 2;
 }
 
 .browse-card__image {

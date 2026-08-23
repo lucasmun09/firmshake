@@ -1,3 +1,9 @@
+import { shouldPersistDebugLogs } from '@/common/config/appStack';
+import {
+  evictBrowseLocalCacheEntries,
+  safeLocalStorageSetItem,
+} from '@/common/services/localStorageQuota';
+
 export type DebugLogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 export type DebugLogEntry = {
@@ -12,7 +18,7 @@ export type DebugLogEntry = {
 const STORAGE_KEY = 'firmshake.debugLogs';
 const LEGACY_CLEARED_FLAG_KEY = 'firmshake.debugLogs.cleared';
 const MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000;
-const MAX_STORAGE_BYTES = 10 * 1024 * 1024;
+const MAX_STORAGE_BYTES = 3 * 1024 * 1024;
 
 type DebugLogListener = (entries: DebugLogEntry[]) => void;
 
@@ -111,9 +117,21 @@ function writeStorage(entries: DebugLogEntry[]): boolean {
       return localStorage.getItem(STORAGE_KEY) === null;
     }
 
+    // Prod builds keep an in-memory ring only; deovo/local auto-persist to device.
+    if (!shouldPersistDebugLogs()) {
+      return false;
+    }
+
     const json = JSON.stringify(entries);
-    localStorage.setItem(STORAGE_KEY, json);
-    return localStorage.getItem(STORAGE_KEY) === json;
+    if (safeLocalStorageSetItem(STORAGE_KEY, json)) {
+      return true;
+    }
+
+    // Last resort: drop oldest half and retry once.
+    const trimmed = entries.slice(Math.ceil(entries.length / 2));
+    const trimmedJson = JSON.stringify(trimmed);
+    evictBrowseLocalCacheEntries({ maxEntries: 5 });
+    return safeLocalStorageSetItem(STORAGE_KEY, trimmedJson);
   } catch {
     return false;
   }
@@ -200,7 +218,10 @@ function initializeDebugLogStorage(): void {
   }
 
   const cleaned = cleanupEntries(raw);
-  if (cleaned.length !== raw.length || JSON.stringify(cleaned) !== JSON.stringify(raw)) {
+  if (
+    shouldPersistDebugLogs()
+    && (cleaned.length !== raw.length || JSON.stringify(cleaned) !== JSON.stringify(raw))
+  ) {
     writeStorage(cleaned);
   }
 

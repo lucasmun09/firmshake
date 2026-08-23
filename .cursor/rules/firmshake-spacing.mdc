@@ -1,0 +1,61 @@
+---
+description: FirmShake spacing and padding standards for page layouts, forms, and chrome
+alwaysApply: true
+---
+
+# FirmShake spacing & padding
+
+Reference for layout breathing room. Prefer CSS variables and shared classes over one-off pixel hacks.
+
+## Tokens (`src/theme/variables.css`)
+
+| Token | Default | ≥768px | Use |
+|---|---|---|---|
+| `--fs-space-xs` | 0.35rem | — | Tight inline gaps (toolbar chips, filter rows) |
+| `--fs-space-sm` | 0.65rem | — | Card grid gap (mobile), compact vertical inset |
+| `--fs-space-md` | 1rem | — | Page inset, form field gap, sidebar inset |
+| `--fs-space-lg` | 1.25rem | — | Section gap between stacked blocks |
+| `--fs-space-xl` | 1.5rem | — | Empty states, hero spacing |
+| `--fs-space-2xl` | 2rem | — | Landing / marketing shells |
+| `--fs-page-inset-inline` | `--fs-space-md` | 1.15rem | Horizontal page gutter |
+| `--fs-page-inset-block` | `--fs-space-md` | 1.15rem | Vertical page gutter |
+| `--fs-section-gap` | `--fs-space-lg` | — | Between sidebar sections, settings blocks |
+| `--fs-card-gap` | `--fs-space-sm` | 0.85rem | Browse card grid gap |
+| `--fs-form-field-gap` | `--fs-space-md` | — | Stacked form controls / block buttons |
+| `--fs-sidebar-inset` | `--fs-space-md` | 1.15rem | Filter sidebar and mobile filter panels |
+| `--fs-toolbar-inset` | `--fs-space-sm` | 0.75rem | Top toolbar horizontal inset |
+
+## Layout patterns (`src/theme/layout.css`)
+
+| Pattern | When to use |
+|---|---|
+| `AppContentFrame` | Default wrapper for tab pages, auth forms, settings — supplies `--fs-page-inset-*` |
+| `app-content-frame--flush-x` | Full-bleed horizontal content (listing photo gallery) |
+| `app-content-frame--compact-y` | Toolbar sub-rows (browse search) — horizontal inset only |
+| `app-tab-content` on `ion-content` | Tab feeds (Browse, Buying, Selling, Inbox) — zero ion padding; frame supplies inset |
+| `app-form-stack` | Create/edit forms — consistent vertical gap between fields |
+| `app-section-stack` | Settings shortcuts, multi-block pages |
+
+**Do not** combine `ion-padding` with `AppContentFrame` — that double-pads. Use the frame alone.
+
+**Ionic lists** on tab pages sit inside `AppContentFrame`; list rows inherit the page gutter instead of running flush to the screen edge.
+
+## Component-specific
+
+| Surface | Standard |
+|---|---|
+| Browse filter sidebar | `padding: var(--fs-sidebar-inset)`; section gap `--fs-section-gap` |
+| Mobile filter drawer / panel | Body uses `--fs-sidebar-inset` inline padding |
+| Browse card grid | `gap: var(--fs-card-gap)` |
+| Top toolbar | `padding-inline: var(--fs-toolbar-inset)` on `.toolbar-layout` |
+| Landing / welcome | Own shell padding (`2rem 1.25rem`); not forced through `AppContentFrame` |
+| Listing detail | Gallery full-bleed (`--flush-x`); `.details` uses `--fs-page-inset-inline` |
+
+## Adding new pages
+
+1. Wrap main content in `AppContentFrame`.
+2. Tab list pages: `ion-content` + `app-tab-content`.
+3. Forms: `app-form-stack` on the field container.
+4. Only add page-local padding when a subsection needs an exception (e.g. full-bleed media).
+
+Cross-reference **Loading UX** and tab layout in `firmshake-design.mdc`.

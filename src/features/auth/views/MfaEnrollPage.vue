@@ -6,7 +6,7 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content class="ion-padding">
+    <ion-content>
       <AppContentFrame>
         <p class="intro">
           A verified phone number is required to use FirmShake. We will send a one-time

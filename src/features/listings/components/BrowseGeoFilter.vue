@@ -10,7 +10,7 @@
     <div class="radius-block">
       <ion-select
         :value="modelValue.radiusMiles"
-        interface="popover"
+        :interface="selectInterface"
         class="radius-select"
         aria-label="Search radius in miles"
         @ionChange="onRadiusChange"
@@ -72,7 +72,10 @@ import {
   IonSelectOption,
 } from '@ionic/vue';
 
+import { useIonSelectInterface } from '@/common/composables/useIonSelectInterface';
 import AddressAutocomplete from '@/components/AddressAutocomplete.vue';
+
+const { selectInterface } = useIonSelectInterface();
 import {
   getCurrentCoordinates,
   getGeolocationErrorMessage,
@@ -309,6 +312,9 @@ function clearFilter() {
 <style scoped>
 .browse-geo-filter {
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-xs);
 }
 
 .center-label {
@@ -338,7 +344,7 @@ function clearFilter() {
 }
 
 .location-actions {
-  margin: 0.5rem 0;
+  margin: var(--fs-space-xs) 0;
 }
 
 .address-block :deep(.address-field) {

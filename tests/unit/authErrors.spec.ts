@@ -67,6 +67,38 @@ describe('formatMfaError', () => {
       'Phone verification failed. Please try again.',
     );
   });
+
+  it('maps localStorage quota errors to a friendly resend message', () => {
+    expect(
+      formatMfaError(
+        Object.assign(new Error('QuotaExceededError'), {
+          code: 'firmshake/storage-quota-exceeded',
+          mfaStep: 'verifyPhoneNumber',
+        }),
+      ),
+    ).toBe("We couldn't send a new code right now. Please try again or sign in again.");
+  });
+
+  it('maps DOMException quota errors without auth codes', () => {
+    expect(
+      formatMfaError(new DOMException('quota', 'QuotaExceededError')),
+    ).toBe("We couldn't send a new code right now. Please try again or sign in again.");
+  });
+
+  it('maps resend failures at verifyPhoneNumber step', () => {
+    expect(formatMfaError({ code: 'auth/too-many-requests', mfaStep: 'verifyPhoneNumber' })).toBe(
+      'Too many code requests. Wait a few minutes and try again.',
+    );
+    expect(formatMfaError({ code: 'auth/session-expired', mfaStep: 'verifyPhoneNumber' })).toBe(
+      'Your sign-in session expired. Go back to sign in and try again.',
+    );
+  });
+
+  it('maps recaptcha failures at recaptcha step', () => {
+    expect(formatMfaError({ code: 'auth/captcha-check-failed', mfaStep: 'recaptcha' })).toBe(
+      'Security check failed. Refresh the page and try again.',
+    );
+  });
 });
 
 describe('formatStartOverError', () => {

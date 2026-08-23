@@ -21,7 +21,7 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content v-if="listingLoading" class="ion-padding">
+    <ion-content v-if="listingLoading">
       <AppContentFrame>
         <ListingDetailSkeleton />
       </AppContentFrame>

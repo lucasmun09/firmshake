@@ -9,7 +9,7 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content class="ion-padding">
+    <ion-content>
       <AppContentFrame>
         <div v-if="loading" class="empty-state">
           <ion-spinner name="crescent" />
