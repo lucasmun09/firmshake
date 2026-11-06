@@ -1,5 +1,5 @@
---- /tmp/deploy-web-old.yml	2026-11-05 21:18:17
-+++ /tmp/deploy-web-new.yml	2026-11-05 21:18:17
+--- a/.github/workflows/deploy-web.yml
++++ b/.github/workflows/deploy-web.yml
 @@ -44,8 +44,9 @@
        - run: npm ci
  
@@ -7,7 +7,7 @@
 -        run: npm run build
 +        run: npm run build:devo
          env:
-+          VITE_APP_STACK: devo
++          VITE_APP_STACK: deovo
            VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL || 'https://firmshake-api-staging-858269838319.us-central1.run.app' }}
            VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
            VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}

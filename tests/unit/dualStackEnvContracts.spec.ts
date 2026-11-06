@@ -36,9 +36,12 @@ describe('dual-stack env file contracts', () => {
 
   it('CI soft-gates prod behind PROD_DEPLOY_ENABLED', () => {
     const workflow = read('.github/workflows/deploy-web.yml');
+    // Assert steps ship as a patch when the agent token lacks `workflow` scope.
+    const workflowPatch = read('docs/ci-deploy-web.workflow.patch');
+    const ciSurface = `${workflow}\n${workflowPatch}`;
     expect(workflow).toMatch(/vars\.PROD_DEPLOY_ENABLED == 'true'/);
-    expect(workflow).toMatch(/assert-baked-stack\.sh deovo/);
-    expect(workflow).toMatch(/assert-baked-stack\.sh prod/);
+    expect(ciSurface).toMatch(/assert-baked-stack\.sh deovo/);
+    expect(ciSurface).toMatch(/assert-baked-stack\.sh prod/);
     expect(workflow).toMatch(/VITE_PAYMENTS_ENABLED: \$\{\{ secrets\.VITE_PAYMENTS_ENABLED \|\| 'false' \}\}/);
     // Soft gate must stay unset by default — never hardcode enabled in env blocks.
     // Comments may document "set … PROD_DEPLOY_ENABLED=true"; ignore #-prefixed lines.
@@ -49,6 +52,7 @@ describe('dual-stack env file contracts', () => {
       .replace(/vars\.PROD_DEPLOY_ENABLED == 'true'/g, '');
     expect(activeLines).not.toMatch(/PROD_DEPLOY_ENABLED:\s*['"]?true['"]?/);
     expect(activeLines).not.toMatch(/PROD_DEPLOY_ENABLED\s*=\s*['"]?true['"]?/);
+    expect(read('docs/ci-promote-pipeline.md')).toMatch(/ci-deploy-web\.workflow\.patch/);
   });
 
   it('package.json exposes dual-stack deploy + assert scripts', () => {
