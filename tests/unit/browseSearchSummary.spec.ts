@@ -1,11 +1,25 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { BrowseSearchResult } from '@/features/listings/services/browseSearch';
 import {
   listingsFromBrowseSummaryResult,
+  searchBrowseSummaryListings,
   summarizeBrowseSearchResult,
 } from '@/features/listings/services/browseSearchSummary';
 import type { Listing } from '@/types';
+
+vi.mock('@/utils/apiBaseUrl', () => ({
+  getApiBaseUrl: () => 'https://api.test',
+  isApiConfigured: () => true,
+}));
+
+vi.mock('@/common/debug/loggedFetch', () => ({
+  loggedFetch: vi.fn(),
+}));
+
+vi.mock('@/common/services/api', () => ({
+  authHeaders: vi.fn(async () => ({})),
+}));
 
 function makeListing(id: string): Listing {
   return {
@@ -26,6 +40,10 @@ function makeListing(id: string): Listing {
 }
 
 describe('browseSearchSummary', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('summarizeBrowseSearchResult strips heavy listing fields before cache write', () => {
     const result: BrowseSearchResult = {
       listings: [makeListing('1')],
@@ -100,5 +118,42 @@ describe('browseSearchSummary', () => {
     expect(listings[0]?.id).toBe('2');
     expect(listings[0]?.description).toBe('');
     expect(listings[0]?.imageUrls).toEqual(['https://example.com/a.jpg']);
+  });
+
+  it('searchBrowseSummaryListings maps /summary hits without heavy fields', async () => {
+    const { loggedFetch } = await import('@/common/debug/loggedFetch');
+    vi.mocked(loggedFetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        listings: [
+          {
+            id: 's1',
+            title: 'Sofa',
+            price: 200,
+            imageUrl: 'https://example.com/sofa.jpg',
+            status: 'active',
+            sellerId: 'seller',
+            communityIds: ['all'],
+            primaryCategoryId: 'furniture',
+          },
+        ],
+        total: 1,
+        page: 1,
+        pageSize: 24,
+        hasMore: false,
+        shape: 'summary',
+      }),
+    } as Response);
+
+    const result = await searchBrowseSummaryListings({ q: 'sofa' });
+
+    expect(loggedFetch).toHaveBeenCalledWith(
+      'https://api.test/api/v1/browse/summary',
+      expect.any(Object),
+      expect.any(Object),
+    );
+    expect(result.listings[0]?.id).toBe('s1');
+    expect(result.listings[0]).not.toHaveProperty('description');
+    expect(result.listings[0]).not.toHaveProperty('imageUrls');
   });
 });

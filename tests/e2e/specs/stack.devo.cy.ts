@@ -63,4 +63,33 @@ describe('Dual-stack — deovo hosting identity', () => {
       }
     });
   });
+
+  it('staging API /ready reports ready when dual-stack fields are present', () => {
+    const apiBase =
+      Cypress.env('API_BASE_URL') ||
+      'https://firmshake-api-staging-858269838319.us-central1.run.app';
+    cy.request({ url: `${apiBase}/ready`, failOnStatusCode: false }).then((resp) => {
+      if (resp.status === 404) {
+        cy.log('Legacy API without /ready — redeploy firmshake-api staging');
+        return;
+      }
+      expect(resp.status).to.eq(200);
+      const body = resp.body as {
+        status?: string;
+        service?: string;
+        stack?: string;
+        firebaseProjectId?: string;
+        paymentsEnabled?: boolean;
+        ready?: boolean;
+      };
+      expect(body.status).to.eq('ok');
+      expect(body.service).to.eq('firmshake-api');
+      if (body.stack !== undefined) {
+        expect(body.stack).to.eq('devo');
+        expect(body.firebaseProjectId).to.eq('firmshake-dev');
+        expect(body.paymentsEnabled).to.eq(true);
+        expect(body.ready).to.eq(true);
+      }
+    });
+  });
 });

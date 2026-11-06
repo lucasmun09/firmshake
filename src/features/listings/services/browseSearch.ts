@@ -1,7 +1,4 @@
 import { debugLog } from '@/common/debug/debugLog';
-import { loggedFetch } from '@/common/debug/loggedFetch';
-import { authHeaders } from '@/common/services/api';
-import { logListingSearchResults } from '@/features/listings/utils/geoDebugLog';
 import {
   buildCacheKey,
   getCached,
@@ -15,31 +12,21 @@ import {
   type BrowseSummarySearchResult,
 } from '@/features/listings/services/browseSearchSummary';
 import {
+  fetchBrowseSearchEndpoint,
+  type BrowseSearchApiPayload,
+  type BrowseSearchParams,
+  type BrowseSort,
+} from '@/features/listings/services/browseSearchRequest';
+import { logListingSearchResults } from '@/features/listings/utils/geoDebugLog';
+import {
   hydrateBrowseMapPinGroups,
   type BrowseMapPinGroup,
   type BrowseMapPinGroupSummary,
 } from '@/features/listings/utils/browseMapPinAggregation';
-import { getApiBaseUrl, isApiConfigured } from '@/utils/apiBaseUrl';
+import { isApiConfigured } from '@/utils/apiBaseUrl';
 import type { Listing } from '@/types';
 
-export type BrowseSort = 'newest' | 'price_asc' | 'price_desc' | 'distance';
-
-export interface BrowseSearchParams {
-  q?: string;
-  communityId?: string;
-  categoryId?: string;
-  categoryIds?: string[];
-  priceMin?: number;
-  priceMax?: number;
-  hasLocation?: boolean;
-  lat?: number;
-  lng?: number;
-  radiusMiles?: number;
-  sort?: BrowseSort;
-  page?: number;
-  pageSize?: number;
-  forceRefresh?: boolean;
-}
+export type { BrowseSearchParams, BrowseSort };
 
 export interface BrowseSearchResult {
   listings: Listing[];
@@ -100,6 +87,60 @@ function mapBrowseHit(hit: Record<string, unknown>): Listing {
   };
 }
 
+function resultFromPayload(payload: BrowseSearchApiPayload): BrowseSearchResult {
+  const listings = payload.listings.map(mapBrowseHit);
+  const pinGroups = payload.pinGroups?.length
+    ? hydrateBrowseMapPinGroups(payload.pinGroups as BrowseMapPinGroupSummary[], listings)
+    : undefined;
+
+  return {
+    listings,
+    total: payload.total,
+    page: payload.page,
+    pageSize: payload.pageSize,
+    hasMore: payload.hasMore,
+    engine: payload.engine,
+    pinGroups,
+  };
+}
+
+/**
+ * Prefer local-first `/summary` (smaller payload). Fall back to full `/search`
+ * when the API has not been upgraded yet (404) or summary fails transiently.
+ */
+async function fetchBrowseListingsPreferSummary(
+  params: BrowseSearchParams,
+  page: number,
+  pageSize: number,
+): Promise<BrowseSearchResult> {
+  const summaryAttempt = await fetchBrowseSearchEndpoint('summary', params, page, pageSize);
+  if (summaryAttempt.ok) {
+    debugLog.debug('browse-bff', 'browse.summary.hit', {
+      page,
+      pageSize,
+      total: summaryAttempt.payload.total,
+      shape: summaryAttempt.payload.shape,
+    });
+    return resultFromPayload(summaryAttempt.payload);
+  }
+
+  debugLog.info('browse-bff', 'browse.summary.fallback_search', {
+    status: summaryAttempt.status,
+    page,
+  });
+
+  const searchAttempt = await fetchBrowseSearchEndpoint('search', params, page, pageSize);
+  if (!searchAttempt.ok) {
+    debugLog.warn('browse-bff', 'Browse search request failed', {
+      status: searchAttempt.status,
+      page,
+    });
+    throw new Error('Search is temporarily unavailable');
+  }
+
+  return resultFromPayload(searchAttempt.payload);
+}
+
 export async function searchBrowseListings(
   params: BrowseSearchParams,
 ): Promise<BrowseSearchResult> {
@@ -128,82 +169,7 @@ export async function searchBrowseListings(
     }
   }
 
-  const body: Record<string, unknown> = {
-    communityId: params.communityId ?? 'all',
-    page,
-    pageSize,
-    sort: params.sort ?? 'newest',
-  };
-
-  if (params.q) body.q = params.q;
-  if (params.categoryId) body.categoryId = params.categoryId;
-  if (params.categoryIds?.length) body.categoryIds = params.categoryIds;
-  if (params.priceMin != null) body.priceMin = params.priceMin;
-  if (params.priceMax != null) body.priceMax = params.priceMax;
-  if (params.hasLocation != null) body.hasLocation = params.hasLocation;
-  if (params.lat != null) body.lat = params.lat;
-  if (params.lng != null) body.lng = params.lng;
-  if (params.radiusMiles != null) body.radiusMiles = params.radiusMiles;
-
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  const auth = await authHeaders();
-  if (typeof auth === 'object' && auth && 'Authorization' in auth && auth.Authorization) {
-    headers.Authorization = String(auth.Authorization);
-  }
-
-  const response = await loggedFetch(
-    `${getApiBaseUrl()}/api/v1/browse/search`,
-    {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-    },
-    { category: 'browse-bff', label: 'POST /api/v1/browse/search' },
-  );
-
-  if (!response.ok) {
-    let detail = '';
-    try {
-      const errorPayload = (await response.json()) as { error?: string };
-      detail = errorPayload.error ?? '';
-    } catch {
-      // Response body may not be JSON.
-    }
-
-    debugLog.warn('browse-bff', 'Browse search request failed', {
-      status: response.status,
-      detail: detail || undefined,
-      request: body,
-    });
-    throw new Error('Search is temporarily unavailable');
-  }
-
-  const payload = (await response.json()) as {
-    listings: Record<string, unknown>[];
-    total: number;
-    page: number;
-    pageSize: number;
-    hasMore: boolean;
-    engine?: string;
-    pinGroups?: BrowseMapPinGroupSummary[];
-  };
-
-  const listings = payload.listings.map(mapBrowseHit);
-  const pinGroups = payload.pinGroups?.length
-    ? hydrateBrowseMapPinGroups(payload.pinGroups, listings)
-    : undefined;
-
-  const result: BrowseSearchResult = {
-    listings,
-    total: payload.total,
-    page: payload.page,
-    pageSize: payload.pageSize,
-    hasMore: payload.hasMore,
-    engine: payload.engine,
-    pinGroups,
-  };
+  const result = await fetchBrowseListingsPreferSummary(params, page, pageSize);
 
   setCached(cacheKey, summarizeBrowseSearchResult(result));
   logListingSearchResults(

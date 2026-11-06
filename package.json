@@ -18,7 +18,7 @@
     "test:e2e:smoke": "cypress run --spec tests/e2e/specs/auth.smoke.cy.ts,tests/e2e/specs/guest.routes.cy.ts,tests/e2e/specs/stack.devo.cy.ts,tests/e2e/specs/auth.login.cy.ts,tests/e2e/specs/auth.register.cy.ts,tests/e2e/specs/mfa.cy.ts,tests/e2e/specs/browse.filter.cy.ts,tests/e2e/specs/listing.upload.cy.ts,tests/e2e/specs/listing.detail.cy.ts,tests/e2e/specs/messages.cy.ts,tests/e2e/specs/communities.cy.ts,tests/e2e/specs/selling.cy.ts,tests/e2e/specs/buying.cy.ts,tests/e2e/specs/meetups.cy.ts,tests/e2e/specs/profile.cy.ts,tests/e2e/specs/settings.navigation.cy.ts",
     "test:integration": "npm run test:e2e:smoke",
     "test:unit": "vitest",
-    "test:unit:dual-stack": "vitest --run tests/unit/appStack.spec.ts tests/unit/stackHosts.spec.ts tests/unit/paymentsFlag.spec.ts tests/unit/paymentsDisabledUx.spec.ts tests/unit/assertBakedStack.spec.ts tests/unit/dualStackEnvContracts.spec.ts tests/unit/checkProdReadiness.spec.ts tests/unit/dualStackCrossRepo.spec.ts tests/unit/dualStackCorsCatalog.spec.ts tests/unit/preflightHosting.spec.ts",
+    "test:unit:dual-stack": "vitest --run tests/unit/appStack.spec.ts tests/unit/stackHosts.spec.ts tests/unit/paymentsFlag.spec.ts tests/unit/paymentsDisabledUx.spec.ts tests/unit/assertBakedStack.spec.ts tests/unit/dualStackEnvContracts.spec.ts tests/unit/checkProdReadiness.spec.ts tests/unit/dualStackCrossRepo.spec.ts tests/unit/dualStackCorsCatalog.spec.ts tests/unit/preflightHosting.spec.ts tests/unit/apiHealth.spec.ts tests/unit/apiHealthContract.spec.ts",
     "lint": "eslint .",
     "firebase:setup": "bash scripts/setup-firebase.sh",
     "firebase:setup:prod": "bash scripts/setup-firebase-prod.sh",

@@ -71,6 +71,10 @@ describe('dual-stack env file contracts', () => {
     expect(read('src/common/config/featureFlags.ts')).toMatch(
       /from '@\/common\/config\/paymentsFlag'/,
     );
+    expect(read('src/common/services/apiClient.ts')).toMatch(/authHeaders/);
+    expect(read('src/common/services/apiHealth.ts')).toMatch(/checkApiHealth/);
+    expect(read('src/common/services/apiHealthContract.ts')).toMatch(/assertDevoHealthContract/);
+    expect(read('docs/dual-stack-modules.md')).toMatch(/apiHealthContract/);
   });
 
   it('documents focused dual-stack runbooks', () => {

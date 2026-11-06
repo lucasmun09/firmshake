@@ -12,17 +12,7 @@ vi.mock('@/utils/apiBaseUrl', () => ({
 }));
 
 vi.mock('@/common/debug/loggedFetch', () => ({
-  loggedFetch: vi.fn(async () => ({
-    ok: true,
-    json: async () => ({
-      listings: [{ id: 'l1', title: 'Bike', price: 100, communityIds: ['all'], primaryCategoryId: 'general' }],
-      total: 1,
-      page: 1,
-      pageSize: 24,
-      hasMore: false,
-      engine: 'firestore',
-    }),
-  })),
+  loggedFetch: vi.fn(),
 }));
 
 vi.mock('@/common/services/api', () => ({
@@ -46,8 +36,30 @@ describe('browseSearch', () => {
     vi.clearAllMocks();
   });
 
-  it('posts combined filters to BFF browse search', async () => {
+  it('prefers POST /api/v1/browse/summary for combined filters', async () => {
     const { loggedFetch } = await import('@/common/debug/loggedFetch');
+    vi.mocked(loggedFetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        listings: [
+          {
+            id: 'l1',
+            title: 'Bike',
+            price: 100,
+            imageUrl: 'https://cdn/a.jpg',
+            communityIds: ['all'],
+            primaryCategoryId: 'general',
+          },
+        ],
+        total: 1,
+        page: 1,
+        pageSize: 24,
+        hasMore: false,
+        engine: 'firestore',
+        shape: 'summary',
+      }),
+    } as Response);
+
     const { searchBrowseListings, browseSearchCacheKey } = await import(
       '@/features/listings/services/browseSearch'
     );
@@ -66,15 +78,66 @@ describe('browseSearch', () => {
     });
 
     expect(loggedFetch).toHaveBeenCalledWith(
-      'https://api.test/api/v1/browse/search',
+      'https://api.test/api/v1/browse/summary',
       expect.objectContaining({
         method: 'POST',
         body: expect.stringContaining('"radiusMiles":25'),
       }),
       expect.any(Object),
     );
+    expect(loggedFetch).toHaveBeenCalledTimes(1);
 
     expect(browseSearchCacheKey({ q: 'bike', sort: 'distance', page: 2 })).toContain('browse-search');
     expect(useBffBrowse()).toBe(true);
+  });
+
+  it('falls back to /search when /summary is unavailable', async () => {
+    const { loggedFetch } = await import('@/common/debug/loggedFetch');
+    vi.mocked(loggedFetch)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        json: async () => ({ error: 'not found' }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          listings: [
+            {
+              id: 'l2',
+              title: 'Chair',
+              description: 'Oak',
+              price: 40,
+              imageUrl: 'https://cdn/chair.jpg',
+              imageUrls: ['https://cdn/chair.jpg'],
+              communityIds: ['all'],
+              primaryCategoryId: 'furniture',
+            },
+          ],
+          total: 1,
+          page: 1,
+          pageSize: 24,
+          hasMore: false,
+          engine: 'firestore',
+        }),
+      } as Response);
+
+    const { searchBrowseListings } = await import('@/features/listings/services/browseSearch');
+    const result = await searchBrowseListings({ q: 'chair' });
+
+    expect(loggedFetch).toHaveBeenNthCalledWith(
+      1,
+      'https://api.test/api/v1/browse/summary',
+      expect.any(Object),
+      expect.any(Object),
+    );
+    expect(loggedFetch).toHaveBeenNthCalledWith(
+      2,
+      'https://api.test/api/v1/browse/search',
+      expect.any(Object),
+      expect.any(Object),
+    );
+    expect(result.listings[0]?.id).toBe('l2');
+    expect(result.listings[0]?.description).toBe('Oak');
   });
 });
