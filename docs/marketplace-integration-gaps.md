@@ -55,5 +55,5 @@ cd ../firmshake-api && python -m pytest tests/test_marketplace_flow_no_payments.
 
 ## When to redeploy
 
-Docs + tests only → no hosting/API redeploy required for this change set.
-Leave `PROD_DEPLOY_ENABLED` unset.
+Saved tombstone client sync → `npm run deploy:hosting` (deovo) so devices pick up LWW hydrate.
+Docs/tests-only edits → no redeploy. Leave `PROD_DEPLOY_ENABLED` unset.
