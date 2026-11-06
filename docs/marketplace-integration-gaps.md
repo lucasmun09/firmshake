@@ -27,7 +27,7 @@ Honest leftover risk after adding modular Vitest + Cypress coverage for
 4. ~~**Saved sync race**~~ **Done** — local + remote soft-delete tombstones; LWW merge (`deletedAt` vs `savedAt`); see `docs/saved-listings-sync.md`.
 5. **Own-listing messaging** — composer is hidden for the seller’s own listing; e2e “send message” soft-skips when the first browse card is owned by the test user.
 6. ~~**Inbox BFF default-off**~~ **Devo on** — `VITE_USE_BFF_INBOX=true` via `.env.devo` + CI deovo job; cursor page accumulate + Vitest; prod stays false. Authenticated inbox smoke still manual / MFA e2e.
-7. ~~**Thread pagination (Firestore)**~~ **Done** — Firestore path caps at `FIRESTORE_INBOX_THREAD_CAP` (300, BFF parity); BFF path still cursor-accumulates. ~~Enrich cache~~ **Done**.
+7. ~~**Thread pagination (Firestore)**~~ **Done** — Firestore path caps at `FIRESTORE_INBOX_THREAD_CAP` (300, BFF parity); BFF path still cursor-accumulates. ~~Enrich cache~~ **Done**. Integration: `marketplaceInboxCap.spec.ts` + soft-smoke inbox guest wall / MFA load + API cursor page in `test_marketplace_flow_no_payments.py`.
 8. **Sell photo upload + Typesense index lag** — create listing e2e stubs `/api/images`; browse visibility after create is eventually consistent and not asserted in the Vitest chain.
 9. ~~**Block-list filtering on browse**~~ **Done** — Bearer forwarded on browse/summary+search; client `browseBlockFilter` for cache paint; `bustBrowseCachesForBlockedSeller` after block.
 10. **Payments / deposits** — intentionally out of scope; API test only asserts payment-ish routes stay 404/405/501/503.

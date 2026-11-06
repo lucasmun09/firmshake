@@ -73,6 +73,11 @@ describe('Marketplace soft smoke — guest mark-sold / map / blocked', () => {
     cy.visitApp('/tabs/blockedusers');
     expectLoginRedirect('/tabs/blockedusers');
   });
+
+  it('redirects guests from inbox tab', () => {
+    cy.visitApp('/tabs/inbox');
+    expectLoginRedirect('/tabs/inbox');
+  });
 });
 
 describeWithMfaAuth('Marketplace soft smoke — mark-sold / blocked / map (MFA)', () => {
@@ -141,6 +146,21 @@ describeWithMfaAuth('Marketplace soft smoke — mark-sold / blocked / map (MFA)'
       const text = $content.text();
       expect(
         text.includes('You have not blocked anyone')
+          || $content.find('ion-item').length > 0,
+      ).to.be.true;
+    });
+  });
+
+  it('loads inbox tab empty state or thread list (BFF or Firestore path)', () => {
+    cy.visitApp('/tabs/inbox');
+    cy.contains('.toolbar-title', 'Inbox', { timeout: 15_000 }).should('be.visible');
+    cy.get('ion-content', { timeout: 20_000 }).should(($content) => {
+      const text = $content.text();
+      expect(
+        text.includes('No messages yet')
+          || text.includes('buyer')
+          || text.includes('seller')
+          || text.includes('archived')
           || $content.find('ion-item').length > 0,
       ).to.be.true;
     });

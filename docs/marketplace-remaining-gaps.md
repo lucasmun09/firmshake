@@ -47,7 +47,7 @@ Payments / Stripe / escrow = **out of scope** (Phase 6+). Mock meetup deposits s
 |---|---|---|
 | Unit (browse, auth, dual-stack, saved+tombstones, threads, share, seller, report, message images, description search, browse block-list, thread enrich cache) | **Done** | Targeted suites green |
 | Cypress smoke (auth, browse, listing, stack.devo) | **Done** (soft) | Soft smoke: share, seller, mark-sold, report cancel, map, blocked, attach photo |
-| Broader integration tests | **Done** (Vitest) | `tests/unit/integration/marketplace*.spec.ts` + API `test_marketplace_flow_no_payments.py` — see `docs/marketplace-integration-gaps.md` |
+| Broader integration tests | **Done** (Vitest) | `tests/unit/integration/marketplace*.spec.ts` (incl. inbox cap/BFF accumulate/enrich/block) + soft-smoke inbox + API `test_marketplace_flow_no_payments.py` cursor pages — see `docs/marketplace-integration-gaps.md` |
 
 ## Priority queue
 
