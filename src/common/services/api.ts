@@ -317,7 +317,6 @@ export interface BffMessageResponse {
   senderId: string;
   senderName: string;
   text: string;
-  imageUrl?: string;
   recipientId?: string;
   createdAt?: number | null;
 }
@@ -329,7 +328,6 @@ function mapBffMessageResponse(data: BffMessageResponse): Message {
     senderId: data.senderId,
     senderName: data.senderName,
     text: data.text,
-    imageUrl: data.imageUrl?.trim() || undefined,
     recipientId: data.recipientId,
     createdAt: data.createdAt ? new Date(data.createdAt) : undefined,
   };
