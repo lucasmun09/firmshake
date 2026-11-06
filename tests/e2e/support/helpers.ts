@@ -114,6 +114,26 @@ export function selectIonOption(selectLabel: string, optionText: string): void {
   cy.contains('ion-select-option, ion-item, ion-radio', optionText).click({ force: true });
 }
 
+/**
+ * Choose Cards / Map / List from the browse view selector (sidebar).
+ * Works with popover or action-sheet interfaces.
+ */
+export function selectBrowseView(optionText: 'Cards' | 'Map' | 'List'): void {
+  cy.get('ion-select.view-select[aria-label="Browse view"]', { timeout: 15_000 })
+    .should('exist')
+    .click({ force: true });
+  cy.get('ion-popover, ion-action-sheet', { timeout: 10_000 }).should('be.visible');
+  cy.contains(
+    'ion-select-option, ion-item, ion-radio, button, .action-sheet-button',
+    new RegExp(`^${optionText}$`, 'i'),
+  )
+    .first()
+    .click({ force: true });
+}
+
+/** @deprecated Alias — prefer selectBrowseView */
+export const selectBrowseViewMode = selectBrowseView;
+
 /** Wait until auth bootstrap finishes and URL leaves login/register. */
 export function waitForAuthenticatedApp(): void {
   cy.url({ timeout: 30_000 }).should('not.match', /\/(login|register)$/);

@@ -10,11 +10,14 @@ Honest leftover risk after adding modular Vitest + Cypress coverage for
 | Vitest cross-feature contracts | `tests/unit/integration/marketplace*.spec.ts` | Can fail on pure contracts (summary strip, save cap/merge, thread/inbox ids, sell create/remove routing, full chain) |
 | Cypress guest walls | `tests/e2e/specs/marketplace.guest.cy.ts` | Real browse→detail + auth redirects; needs live deovo/local with listings |
 | Cypress authenticated chain | `tests/e2e/specs/marketplace.flow.cy.ts` | Real UI when `CYPRESS_TEST_EMAIL_MFA` / password set; skipped otherwise |
+| Cypress soft smoke | `tests/e2e/specs/marketplace.soft-smoke.cy.ts` | Guest map + mark-sold hide + blocked redirect; MFA mark-sold confirm/cancel (no mutate), blocked page, block CTA, map |
 | API Flask chain | `firmshake-api/tests/test_marketplace_flow_no_payments.py` | browse/summary → create → message → inbox read; asserts payment routes absent |
 
-## Related product gap closed this turn
+## Related product gaps closed
 
-**Mark listing sold** (seller-only) is implemented: `routeMarkListingSold` / BFF `POST /api/v1/listings/:id/sold` / Listing detail CTA. Vitest covers it in `listingServiceRouter.spec.ts`, `moderationMarkSold.spec.ts`, and `marketplaceSellFlow.spec.ts`. Cypress mark-sold click path is still open.
+**Mark listing sold** (seller-only) is implemented: `routeMarkListingSold` / BFF `POST /api/v1/listings/:id/sold` / Listing detail CTA (`data-testid="mark-sold-button"`). Vitest covers it in `listingServiceRouter.spec.ts`, `moderationMarkSold.spec.ts`, and `marketplaceSellFlow.spec.ts`. Cypress soft-smoke covers guest hide + seller confirm/cancel without mutating.
+
+**Blocked / map soft smoke** landed in the same Cypress file (guest auth wall + MFA empty/list state; map chrome when BFF browse offers Map).
 
 ## Remaining gaps (do not rubber-stamp)
 
@@ -39,6 +42,9 @@ npm run test:unit -- --run tests/unit/integration
 
 # Web — guest marketplace e2e against deovo (no auth secrets)
 CYPRESS_BASE_URL=https://firmshake-dev.web.app npx cypress run --spec tests/e2e/specs/marketplace.guest.cy.ts
+
+# Web — soft smoke (map / blocked / mark-sold cancel; MFA specs skip without secrets)
+CYPRESS_BASE_URL=https://firmshake-dev.web.app npx cypress run --spec tests/e2e/specs/marketplace.soft-smoke.cy.ts
 
 # Web — authenticated chain (requires MFA test user secrets)
 CYPRESS_BASE_URL=https://firmshake-dev.web.app npm run test:e2e -- --spec tests/e2e/specs/marketplace.flow.cy.ts

@@ -92,6 +92,7 @@
               expand="block"
               color="success"
               fill="solid"
+              data-testid="mark-sold-button"
               :disabled="statusBusy"
               @click="confirmMarkSold"
             >
