@@ -146,7 +146,7 @@ describeWithMfaAuth('Marketplace soft smoke — mark-sold / blocked / map (MFA)'
     });
   });
 
-  it('offers Block user on another seller listing when composer is present', () => {
+  it('offers Block user and message photo attach when composer is present', () => {
     cy.visitApp('/tabs/home');
     cy.get(browseListingRowSelector, { timeout: 25_000 }).then(($items) => {
       expect($items.length).to.be.greaterThan(0);
@@ -155,10 +155,12 @@ describeWithMfaAuth('Marketplace soft smoke — mark-sold / blocked / map (MFA)'
 
       cy.get('body').then(($page) => {
         if ($page.find('ion-footer .composer').length === 0) {
-          cy.log('Own listing or no composer — soft skip block CTA');
+          cy.log('Own listing or no composer — soft skip block/attach CTA');
           return;
         }
         cy.contains('ion-button', /Block user|Unblock user/).should('be.visible');
+        cy.get('[data-testid="attach-message-image"]').should('be.visible');
+        cy.get('[data-testid="message-image-input"]').should('exist');
       });
     });
   });
