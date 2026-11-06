@@ -50,13 +50,33 @@ describe('browseSearchRanking', () => {
     ).toBe(true);
   });
 
-  it('does not match description-only hits', () => {
-    expect(
-      matchesListingSearchQuery(
-        listing({ title: 'Desk lamp', description: 'Perfect for your office setup' }),
-        'office',
-      ),
-    ).toBe(false);
+  it('matches description-only hits below title and seller', () => {
+    const descriptionOnly = listing({
+      title: 'Desk lamp',
+      description: 'Perfect for your office setup',
+    });
+    expect(matchesListingSearchQuery(descriptionOnly, 'office')).toBe(true);
+    // Single-token query hits the all-tokens description branch.
+    expect(listingSearchRelevanceScore(descriptionOnly, 'office')).toBe(100);
+
+    const sellerHit = listingSearchRelevanceScore(
+      listing({ title: 'Desk lamp', sellerName: 'Office Depot' }),
+      'office',
+    );
+    expect(sellerHit).toBeGreaterThan(listingSearchRelevanceScore(descriptionOnly, 'office'));
+  });
+
+  it('ranks all-token description matches above any-token description matches', () => {
+    const allTokens = listingSearchRelevanceScore(
+      listing({ title: 'Lamp', description: 'Bright office desk light' }),
+      'office desk',
+    );
+    const anyToken = listingSearchRelevanceScore(
+      listing({ title: 'Lamp', description: 'Bright office light' }),
+      'office desk',
+    );
+    expect(allTokens).toBe(100);
+    expect(anyToken).toBe(50);
   });
 
   it('sorts by relevance then recency', () => {

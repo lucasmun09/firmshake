@@ -5,11 +5,11 @@ export function normalizeSearchQuery(query: string): string {
 }
 
 /**
- * Higher score = stronger match. Title matches rank above seller name.
- * exact > starts-with > all tokens in title > any token in title > seller name.
+ * Higher score = stronger match. Title > seller name > description body.
+ * exact > starts-with > all tokens in title > any token in title > seller > description.
  */
 export function listingSearchRelevanceScore(
-  listing: Pick<Listing, 'title' | 'sellerName'>,
+  listing: Pick<Listing, 'title' | 'sellerName' | 'description'>,
   query: string,
 ): number {
   const normalized = normalizeSearchQuery(query);
@@ -19,6 +19,7 @@ export function listingSearchRelevanceScore(
 
   const title = (listing.title ?? '').trim().toLowerCase();
   const seller = (listing.sellerName ?? '').trim().toLowerCase();
+  const description = (listing.description ?? '').trim().toLowerCase();
   const terms = normalized.split(' ').filter(Boolean);
 
   if (title === normalized) {
@@ -45,22 +46,26 @@ export function listingSearchRelevanceScore(
   if (terms.some((term) => seller.includes(term))) {
     return 200;
   }
+  if (terms.every((term) => description.includes(term))) {
+    return 100;
+  }
+  if (terms.some((term) => description.includes(term))) {
+    return 50;
+  }
 
-  // TODO: description search — add when product wants full-text body matching.
   return 0;
 }
 
 export function matchesListingSearchQuery(
-  listing: Pick<Listing, 'title' | 'sellerName'>,
+  listing: Pick<Listing, 'title' | 'sellerName' | 'description'>,
   query: string,
 ): boolean {
   return listingSearchRelevanceScore(listing, query) > 0;
 }
 
-export function sortListingsBySearchRelevance<T extends Pick<Listing, 'title' | 'sellerName' | 'createdAt'>>(
-  listings: T[],
-  query: string,
-): T[] {
+export function sortListingsBySearchRelevance<
+  T extends Pick<Listing, 'title' | 'sellerName' | 'description' | 'createdAt'>,
+>(listings: T[], query: string): T[] {
   const normalized = normalizeSearchQuery(query);
   if (!normalized) {
     return listings;

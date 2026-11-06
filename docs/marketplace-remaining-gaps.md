@@ -1,6 +1,6 @@
 # Remaining gaps — full marketplace (no payments)
 
-Honest checklist vs a shippable marketplace **without** a payment processor. Updated 2026-11-05 (message image attachments).
+Honest checklist vs a shippable marketplace **without** a payment processor. Updated 2026-11-05 (description full-text search).
 
 Agent-store copy: Project store `docs/remaining-gaps.md`.
 
@@ -12,7 +12,8 @@ Payments / Stripe / escrow = **out of scope** (Phase 6+). Mock meetup deposits s
 |---|---|---|
 | Auth (email, Google, MFA, password reset link) | **Done** | Devo live; prod Auth domains human |
 | Guest browse + landing / mobile promo | **Done** | |
-| Browse BFF search / filters / map / summary | **Done** | Description full-text still TODO |
+| Browse BFF search / filters / map / summary | **Done** | |
+| **Description full-text search** | **Done** | Typesense `query_by` + Firestore/client ranking include description (below title/seller) |
 | Listing detail + photos | **Done** | |
 | Create / edit listing + image upload | **Done** | API image routes wired |
 | **Mark listing sold** | **Done** | Seller-only UI + Firestore/BFF `POST …/sold`; browse treats sold as unavailable |
@@ -24,10 +25,10 @@ Payments / Stripe / escrow = **out of scope** (Phase 6+). Mock meetup deposits s
 | Communities join/create/moderate | **Done** | |
 | Meetup propose / accept / en route (mock deposit) | **Done** | Real Stripe gated off |
 | Push notifications (FCM) | **Done** | |
-| **Public seller profile page** | **Done** | `/seller/:sellerId` guest-safe; BFF `GET …/users/:uid/public` |
+| **Public seller profile page** | **Done** | `/seller/:sellerId` + guest BFF `GET …/users/:uid/public` |
 | **Share / copy listing link** | **Done** | Web Share API with clipboard fallback |
 | **Listing report / abuse flag** | **Done** | Buyer `listingReports` + Firestore rules |
-| **Message image attachments** | **Done** | Upload via `/api/images`; optional `imageUrl` on send (BFF + Firestore); bubbles use `AuthenticatedImage` |
+| Message image attachments | Open | Text only (sibling WIP) |
 
 ## Dual-stack / prod readiness
 
@@ -44,8 +45,8 @@ Payments / Stripe / escrow = **out of scope** (Phase 6+). Mock meetup deposits s
 
 | Area | Status | Notes |
 |---|---|---|
-| Unit (browse, auth, dual-stack, saved, threads, share, seller, report, message images) | **Done** | Targeted suites green |
-| Cypress smoke (auth, browse, listing, stack.devo) | **Done** (soft) | Soft smoke also hits share, seller, mark-sold, report cancel, map, blocked, attach photo control |
+| Unit (browse, auth, dual-stack, saved, threads, share, seller, report, description search) | **Done** | Targeted suites green |
+| Cypress smoke (auth, browse, listing, stack.devo) | **Done** (soft) | Soft smoke also hits share control + seller profile nav |
 | Broader integration tests | **Done** (Vitest) | `tests/unit/integration/marketplace*.spec.ts` + API `test_marketplace_flow_no_payments.py` — see `docs/marketplace-integration-gaps.md` |
 
 ## Priority queue
@@ -55,6 +56,6 @@ Payments / Stripe / escrow = **out of scope** (Phase 6+). Mock meetup deposits s
 3. ~~Share listing link~~ **Done**
 4. ~~Public seller profile (lightweight)~~ **Done**
 5. ~~Buyer report listing~~ **Done**
-6. ~~Message image attachments~~ **Done** this turn
-7. Description full-text search when product wants it
+6. ~~Description full-text search~~ **Done** this turn
+7. Message image attachments
 8. Deepen MFA `marketplace.flow` when secrets present in CI
