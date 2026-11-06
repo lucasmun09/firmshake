@@ -1,24 +1,29 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  getSavedListingTombstones,
   getSavedListings,
   saveListing,
   setSavedListings,
+  unsaveListing,
   type SavedListingEntry,
 } from '@/features/listings/services/savedListings';
 import { setListingPrefsOwnerUid } from '@/features/listings/services/listingPrefsStorage';
 import type { ListingSummary } from '@/types';
 
-const fetchRemote = vi.fn();
+const fetchRemoteState = vi.fn();
 const upsertRemote = vi.fn();
-const deleteRemote = vi.fn();
+const tombstoneRemote = vi.fn();
 const canSyncRemote = vi.fn();
 
 vi.mock('@/features/listings/services/savedListingsRemote', () => ({
   canSyncSavedListingsRemote: (...args: unknown[]) => canSyncRemote(...args),
-  fetchSavedListingsRemote: (...args: unknown[]) => fetchRemote(...args),
+  fetchSavedListingsRemoteState: (...args: unknown[]) => fetchRemoteState(...args),
+  fetchSavedListingsRemote: async (...args: unknown[]) =>
+    (await fetchRemoteState(...args)).entries,
   upsertSavedListingRemote: (...args: unknown[]) => upsertRemote(...args),
-  deleteSavedListingRemote: (...args: unknown[]) => deleteRemote(...args),
+  tombstoneSavedListingRemote: (...args: unknown[]) => tombstoneRemote(...args),
+  deleteSavedListingRemote: (...args: unknown[]) => tombstoneRemote(...args),
 }));
 
 vi.mock('@/common/debug/debugLog', () => ({
@@ -64,18 +69,21 @@ describe('savedListingsSync', () => {
       },
     });
     setListingPrefsOwnerUid('user-a');
-    fetchRemote.mockReset();
+    fetchRemoteState.mockReset();
     upsertRemote.mockReset();
-    deleteRemote.mockReset();
+    tombstoneRemote.mockReset();
     canSyncRemote.mockReset();
     canSyncRemote.mockReturnValue(true);
     upsertRemote.mockResolvedValue(undefined);
-    deleteRemote.mockResolvedValue(undefined);
+    tombstoneRemote.mockResolvedValue(undefined);
   });
 
   it('hydrates by merging remote into local and pushing local-only', async () => {
     saveListing('user-a', listing('local-only'), 100);
-    fetchRemote.mockResolvedValue([entry('remote-only', 200)]);
+    fetchRemoteState.mockResolvedValue({
+      entries: [entry('remote-only', 200)],
+      tombstones: [],
+    });
 
     const { hydrateSavedListingsFromRemote } = await import(
       '@/features/listings/services/savedListingsSync'
@@ -89,6 +97,48 @@ describe('savedListingsSync', () => {
     ]);
     expect(upsertRemote).toHaveBeenCalledTimes(1);
     expect(upsertRemote.mock.calls[0][1].id).toBe('local-only');
+    expect(tombstoneRemote).not.toHaveBeenCalled();
+  });
+
+  it('does not resurrect a locally unsaved listing from a stale remote save', async () => {
+    saveListing('user-a', listing('a'), 50);
+    unsaveListing('user-a', 'a', 300);
+    expect(getSavedListingTombstones('user-a')).toEqual([{ id: 'a', deletedAt: 300 }]);
+
+    fetchRemoteState.mockResolvedValue({
+      entries: [entry('a', 100)],
+      tombstones: [],
+    });
+
+    const { hydrateSavedListingsFromRemote } = await import(
+      '@/features/listings/services/savedListingsSync'
+    );
+    const merged = await hydrateSavedListingsFromRemote('user-a');
+
+    expect(merged).toEqual([]);
+    expect(getSavedListings('user-a')).toEqual([]);
+    expect(getSavedListingTombstones('user-a')).toEqual([{ id: 'a', deletedAt: 300 }]);
+    expect(tombstoneRemote).toHaveBeenCalledWith('user-a', 'a', 300);
+    expect(upsertRemote).not.toHaveBeenCalled();
+  });
+
+  it('applies a remote tombstone over a stale local save', async () => {
+    saveListing('user-a', listing('a'), 40);
+    fetchRemoteState.mockResolvedValue({
+      entries: [],
+      tombstones: [{ id: 'a', deletedAt: 90 }],
+    });
+
+    const { hydrateSavedListingsFromRemote } = await import(
+      '@/features/listings/services/savedListingsSync'
+    );
+    const merged = await hydrateSavedListingsFromRemote('user-a');
+
+    expect(merged).toEqual([]);
+    expect(getSavedListings('user-a')).toEqual([]);
+    expect(getSavedListingTombstones('user-a')).toEqual([{ id: 'a', deletedAt: 90 }]);
+    expect(tombstoneRemote).not.toHaveBeenCalled();
+    expect(upsertRemote).not.toHaveBeenCalled();
   });
 
   it('skips hydrate when sync is disabled', async () => {
@@ -100,10 +150,10 @@ describe('savedListingsSync', () => {
     const result = await hydrateSavedListingsFromRemote('user-a');
     expect(result).toHaveLength(1);
     expect(result[0]?.id).toBe('a');
-    expect(fetchRemote).not.toHaveBeenCalled();
+    expect(fetchRemoteState).not.toHaveBeenCalled();
   });
 
-  it('syncs toggle upsert and delete', async () => {
+  it('syncs toggle upsert and tombstone delete', async () => {
     const { syncSavedListingToggleRemote } = await import(
       '@/features/listings/services/savedListingsSync'
     );
@@ -113,7 +163,8 @@ describe('savedListingsSync', () => {
     await syncSavedListingToggleRemote('user-a', 'a', true, saved);
     expect(upsertRemote).toHaveBeenCalledWith('user-a', saved);
 
+    unsaveListing('user-a', 'a', 77);
     await syncSavedListingToggleRemote('user-a', 'a', false);
-    expect(deleteRemote).toHaveBeenCalledWith('user-a', 'a');
+    expect(tombstoneRemote).toHaveBeenCalledWith('user-a', 'a', 77);
   });
 });

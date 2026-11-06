@@ -1,17 +1,15 @@
 import { debugLog, serializeError } from '@/common/debug/debugLog';
 import {
+  getSavedListingTombstones,
   getSavedListings,
-  setSavedListings,
+  setSavedListingsState,
   type SavedListingEntry,
 } from '@/features/listings/services/savedListings';
-import {
-  mergeSavedListingEntries,
-  savedListingsMissingFromRemote,
-} from '@/features/listings/services/savedListingsMerge';
+import { mergeSavedListingsState } from '@/features/listings/services/savedListingsMerge';
 import {
   canSyncSavedListingsRemote,
-  deleteSavedListingRemote,
-  fetchSavedListingsRemote,
+  fetchSavedListingsRemoteState,
+  tombstoneSavedListingRemote,
   upsertSavedListingRemote,
 } from '@/features/listings/services/savedListingsRemote';
 
@@ -20,7 +18,7 @@ export function canSyncSavedListings(uid: string): boolean {
 }
 
 /**
- * Pull remote bookmarks, merge with local cache, write local, push local-only rows.
+ * Pull remote bookmarks + tombstones, LWW-merge with local, write local, push gaps.
  * Safe to call on every signed-in bootstrap; no-op for anonymous / missing Firestore.
  */
 export async function hydrateSavedListingsFromRemote(uid: string): Promise<SavedListingEntry[]> {
@@ -31,25 +29,38 @@ export async function hydrateSavedListingsFromRemote(uid: string): Promise<Saved
   debugLog.info('saved-listings', 'hydrate.start', { uid });
 
   try {
-    const remote = await fetchSavedListingsRemote(uid);
+    const remote = await fetchSavedListingsRemoteState(uid);
     const local = getSavedListings(uid);
-    const merged = mergeSavedListingEntries(local, remote);
-    setSavedListings(uid, merged);
+    const localTombstones = getSavedListingTombstones(uid);
+    const merged = mergeSavedListingsState(
+      local,
+      localTombstones,
+      remote.entries,
+      remote.tombstones,
+    );
 
-    const missing = savedListingsMissingFromRemote(merged, remote);
-    for (const entry of missing) {
+    setSavedListingsState(uid, merged.entries, merged.tombstones);
+
+    for (const entry of merged.toUpsert) {
       await upsertSavedListingRemote(uid, entry);
+    }
+    for (const tombstone of merged.toTombstone) {
+      await tombstoneSavedListingRemote(uid, tombstone.id, tombstone.deletedAt);
     }
 
     debugLog.info('saved-listings', 'hydrate.done', {
       uid,
       localCount: local.length,
-      remoteCount: remote.length,
-      mergedCount: merged.length,
-      pushedCount: missing.length,
+      localTombstoneCount: localTombstones.length,
+      remoteCount: remote.entries.length,
+      remoteTombstoneCount: remote.tombstones.length,
+      mergedCount: merged.entries.length,
+      mergedTombstoneCount: merged.tombstones.length,
+      upsertedCount: merged.toUpsert.length,
+      tombstonedCount: merged.toTombstone.length,
     });
 
-    return merged;
+    return merged.entries;
   } catch (error) {
     debugLog.warn('saved-listings', 'hydrate.failed', {
       uid,
@@ -65,6 +76,7 @@ export async function syncSavedListingToggleRemote(
   listingId: string,
   saved: boolean,
   entry?: SavedListingEntry | null,
+  deletedAt = Date.now(),
 ): Promise<void> {
   if (!canSyncSavedListings(uid) || !listingId) {
     return;
@@ -79,10 +91,15 @@ export async function syncSavedListingToggleRemote(
       }
       await upsertSavedListingRemote(uid, resolved);
     } else {
-      await deleteSavedListingRemote(uid, listingId);
+      const localTombstone = getSavedListingTombstones(uid).find((item) => item.id === listingId);
+      await tombstoneSavedListingRemote(
+        uid,
+        listingId,
+        localTombstone?.deletedAt ?? deletedAt,
+      );
     }
 
-    debugLog.debug('saved-listings', 'toggle.sync', { uid, listingId, saved });
+    debugLog.debug('saved-listings', 'toggle.sync', { uid, listingId, saved, deletedAt });
   } catch (error) {
     debugLog.warn('saved-listings', 'toggle.sync.failed', {
       uid,
