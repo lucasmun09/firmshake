@@ -33,6 +33,8 @@ Meetup deposit CTAs read `isPaymentsEnabled()` / `PAYMENTS_DISABLED_USER_MESSAGE
 
 Browse local-first summary (non-payments): `docs/browse-summary-api.md` — client `browseSearchRequest.ts` + `browseSearchSummary.ts`; API `POST /api/v1/browse/summary`.
 
+Messaging / inbox thread split (non-payments): `docs/messaging-threads-modules.md` — `threadModel.ts`, `threadSync.ts`, `threadRebuild.ts`, `threadSubscribe.ts`, barrel `threads.ts`.
+
 ## Health / ready contract (lockstep with API)
 
 `GET {API}/health` and `GET {API}/ready` return:
