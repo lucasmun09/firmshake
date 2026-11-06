@@ -71,6 +71,13 @@ import {
   formatDevoBalanceDollars,
   loadDevoMockAccountBalance,
 } from '@/common/debug/devoDebugTools';
+import {
+  resolveSmsBypassNavigation,
+  resolveSmsBypassToastKind,
+  smsBypassToastMessage,
+} from '@/common/debug/smsBypassNavigation';
+import { currentUser } from '@/features/auth/services/auth';
+import { auth } from '@/common/services/firebase';
 
 const router = useRouter();
 const enabled = isDevoDebugUiEnabled();
@@ -96,28 +103,31 @@ async function onBypassSms() {
   }
   busy.value = true;
   try {
-    const result = await bypassDevoSmsVerification();
     const path = router.currentRoute.value.path;
-    if (path === '/mfa-enroll' || path === '/mfa-challenge') {
-      await router.replace('/tabs/home');
+    const result = await bypassDevoSmsVerification();
+    const hasSignedInUser = Boolean(auth?.currentUser ?? currentUser.value);
+    const nextPath = resolveSmsBypassNavigation(path, hasSignedInUser);
+    const toastKind = resolveSmsBypassToastKind({
+      path,
+      accountSetupFinalized: result.accountSetupFinalized,
+      uid: result.uid,
+    });
+
+    debugLog.info('devo-debug', 'smsBypass.navigation', {
+      path,
+      nextPath,
+      toastKind,
+      hasSignedInUser,
+      uid: result.uid,
+      accountSetupFinalized: result.accountSetupFinalized,
+    });
+
+    if (nextPath) {
+      await router.replace(nextPath);
     }
 
-    if (result.accountSetupFinalized) {
-      await showToast(
-        'SMS enrollment bypassed. Account setup marked complete. (Login MFA challenge still needs a real/test SMS code.)',
-        'success',
-      );
-    } else if (result.uid) {
-      await showToast(
-        'SMS bypass flag set. Could not finalize account setup — try again after signing in.',
-        'warning',
-      );
-    } else {
-      await showToast(
-        'SMS bypass enabled for this device. Sign in / register to skip enrollment.',
-        'success',
-      );
-    }
+    const toast = smsBypassToastMessage(toastKind);
+    await showToast(toast.message, toast.color);
   } catch (error) {
     debugLog.error('devo-debug', 'smsBypass.failed', {
       error: error instanceof Error ? error.message : String(error),
