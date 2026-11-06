@@ -24,10 +24,10 @@ Payments / Stripe / escrow = **out of scope** (Phase 6+). Mock meetup deposits s
 | Communities join/create/moderate | **Done** | |
 | Meetup propose / accept / en route (mock deposit) | **Done** | Real Stripe gated off |
 | Push notifications (FCM) | **Done** | |
-| **Public seller profile page** | **Done** | `/seller/:sellerId` + guest BFF `GET …/users/:uid/public` |
+| **Public seller profile page** | **Done** | `/seller/:sellerId` guest-safe; BFF `GET …/users/:uid/public` |
 | **Share / copy listing link** | **Done** | Web Share API with clipboard fallback |
 | **Listing report / abuse flag** | **Done** | Buyer `listingReports` + Firestore rules |
-| **Message image attachments** | **Done** | Optional `imageUrl` on messages; composer attach + bubble render |
+| **Message image attachments** | **Done** | Upload via `/api/images`; optional `imageUrl` on send (BFF + Firestore); bubbles use `AuthenticatedImage` |
 
 ## Dual-stack / prod readiness
 
@@ -44,8 +44,8 @@ Payments / Stripe / escrow = **out of scope** (Phase 6+). Mock meetup deposits s
 
 | Area | Status | Notes |
 |---|---|---|
-| Unit (browse, auth, dual-stack, saved, threads, share, seller, report, message image) | **Done** | Targeted suites green |
-| Cypress smoke (auth, browse, listing, stack.devo) | **Done** (soft) | Soft smoke also hits share control + seller profile nav |
+| Unit (browse, auth, dual-stack, saved, threads, share, seller, report, message images) | **Done** | Targeted suites green |
+| Cypress smoke (auth, browse, listing, stack.devo) | **Done** (soft) | Soft smoke also hits share, seller, mark-sold, report cancel, map, blocked, attach photo control |
 | Broader integration tests | **Done** (Vitest) | `tests/unit/integration/marketplace*.spec.ts` + API `test_marketplace_flow_no_payments.py` — see `docs/marketplace-integration-gaps.md` |
 
 ## Priority queue
