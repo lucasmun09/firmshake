@@ -17,6 +17,7 @@ import { filterMessagesForParticipant } from '@/features/listings/utils/listingC
 import { db } from '@/common/services/firebase';
 import { ensureFirestoreAuth } from '@/common/services/firestoreAuth';
 import { routeSendListingMessage } from '@/features/messages/services/messageServiceRouter';
+import { normalizeMessageImageUrl } from '@/features/messages/utils/messageImage';
 
 export const MESSAGES_PAGE_SIZE = 50;
 
@@ -27,12 +28,14 @@ export interface MessageSnapshotMeta {
 
 function mapMessage(id: string, listingId: string, data: Record<string, unknown>): Message {
   const createdAt = data.createdAt;
+  const imageUrl = normalizeMessageImageUrl(data.imageUrl);
   return {
     id,
     listingId,
     senderId: String(data.senderId ?? ''),
     senderName: String(data.senderName ?? 'Unknown'),
     text: String(data.text ?? ''),
+    imageUrl,
     recipientId: data.recipientId ? String(data.recipientId) : undefined,
     createdAt:
       createdAt && typeof createdAt === 'object' && 'toDate' in createdAt
@@ -350,7 +353,7 @@ export async function sendListingMessage(
   listingId: string,
   senderName: string,
   text: string,
-  options?: { recipientId?: string },
+  options?: { recipientId?: string; imageUrl?: string },
 ): Promise<Message> {
   return routeSendListingMessage(listingId, senderName, text, options);
 }
@@ -361,13 +364,16 @@ export function createOptimisticMessage(
   senderName: string,
   text: string,
   recipientId?: string,
+  imageUrl?: string,
 ): Message {
+  const normalizedImage = normalizeMessageImageUrl(imageUrl);
   return {
     id: `pending-${Date.now()}`,
     listingId,
     senderId,
     senderName,
     text: text.trim(),
+    imageUrl: normalizedImage,
     recipientId,
     createdAt: new Date(),
   };

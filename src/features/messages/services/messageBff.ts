@@ -5,6 +5,7 @@ import type { Message } from '@/types';
 export interface SendListingMessageInput {
   text: string;
   recipientId?: string;
+  imageUrl?: string;
 }
 
 /** Send a listing message via firmshake-api (thread sync + notification + push server-side). */

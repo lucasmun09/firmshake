@@ -106,7 +106,18 @@
                 class="message-bubble"
                 :class="{ mine: message.senderId === currentUserId }"
               >
-                <p class="message-text">{{ message.text }}</p>
+                <AuthenticatedImage
+                  v-if="message.imageUrl"
+                  class="message-image"
+                  :src="message.imageUrl"
+                  alt="Shared photo"
+                />
+                <p
+                  v-if="message.text && !(message.imageUrl && message.text === MESSAGE_IMAGE_PREVIEW_TEXT)"
+                  class="message-text"
+                >
+                  {{ message.text }}
+                </p>
                 <p v-if="message.createdAt" class="message-time">
                   {{ formatMessageTimestamp(message.createdAt) }}
                 </p>
@@ -130,6 +141,7 @@ import { computed } from 'vue';
 import { IonButton, IonIcon, IonItem, IonLabel, IonList } from '@ionic/vue';
 import { chevronBackOutline } from 'ionicons/icons';
 
+import AuthenticatedImage from '@/components/AuthenticatedImage.vue';
 import UserAvatar from '@/components/UserAvatar.vue';
 import ConversationOverflowMenu from '@/features/messages/components/ConversationOverflowMenu.vue';
 import MessageBubbleSkeleton from '@/components/skeletons/MessageBubbleSkeleton.vue';
@@ -137,6 +149,7 @@ import type { ListingConversation, Message } from '@/types';
 import type { ParticipantProfile } from '@/common/composables/useParticipantProfiles';
 import { formatMessageTimestamp } from '@/utils/dateTime';
 import { sortMessagesNewestFirst } from '@/features/listings/utils/listingConversations';
+import { MESSAGE_IMAGE_PREVIEW_TEXT } from '@/features/messages/utils/messageImage';
 
 const props = withDefaults(
   defineProps<{
@@ -293,6 +306,15 @@ function senderProfile(message: Message): ParticipantProfile {
 .message-bubble.mine {
   background: var(--ion-color-primary-tint);
   border-radius: 16px 16px 16px 4px;
+}
+
+.message-image {
+  display: block;
+  max-width: min(100%, 14rem);
+  max-height: 14rem;
+  margin-bottom: 0.35rem;
+  border-radius: 0.5rem;
+  object-fit: cover;
 }
 
 .message-text {

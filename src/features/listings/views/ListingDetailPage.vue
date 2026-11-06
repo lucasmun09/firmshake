@@ -240,6 +240,24 @@
       <ion-toolbar class="app-toolbar-content">
         <AppContentFrame>
         <ion-item lines="none" class="composer">
+          <input
+            ref="messageImageInputRef"
+            class="composer-file-input"
+            type="file"
+            accept="image/*"
+            data-testid="message-image-input"
+            @change="handleMessageImageSelected"
+          />
+          <ion-button
+            slot="start"
+            fill="clear"
+            aria-label="Attach photo"
+            data-testid="attach-message-image"
+            :disabled="sending || messagingDisabled || attachingMessageImage"
+            @click="openMessageImagePicker"
+          >
+            <ion-icon slot="icon-only" :icon="imageOutline" aria-hidden="true" />
+          </ion-button>
           <ion-input
             v-model="messageText"
             :placeholder="composerPlaceholder"
@@ -248,12 +266,18 @@
           />
           <ion-button
             slot="end"
-            :disabled="sending || messagingDisabled || !messageText.trim()"
+            :disabled="sending || messagingDisabled || (!messageText.trim() && !pendingImageUrl)"
             @click="handleSendMessage"
           >
             Send
           </ion-button>
         </ion-item>
+        <p v-if="pendingImageUrl" class="composer-attachment" data-testid="pending-message-image">
+          Photo attached
+          <ion-button size="small" fill="clear" @click="clearPendingMessageImage">
+            Remove
+          </ion-button>
+        </p>
         </AppContentFrame>
       </ion-toolbar>
     </ion-footer>
@@ -265,9 +289,10 @@ import { formatPrice } from '@/utils/currency';
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { onIonViewWillEnter } from '@ionic/vue';
-import { bookmark, bookmarkOutline, shareOutline } from 'ionicons/icons';
+import { bookmark, bookmarkOutline, imageOutline, shareOutline } from 'ionicons/icons';
 import { shareOrCopyListingLink } from '@/features/listings/utils/shareListing';
 import { submitListingReport } from '@/features/listings/services/listingReports';
+import { uploadImage } from '@/common/services/api';
 import { formatDocumentTitle } from '@/router/pageTitle';
 import {
   IonBackButton,
@@ -421,9 +446,49 @@ const chatPanelStyle = computed(() => {
 
 const {
   messageText,
+  pendingImageUrl,
   sending,
   sendMessage,
 } = useListingChat(allMessages);
+
+const messageImageInputRef = ref<HTMLInputElement | null>(null);
+const attachingMessageImage = ref(false);
+
+function openMessageImagePicker() {
+  messageImageInputRef.value?.click();
+}
+
+function clearPendingMessageImage() {
+  pendingImageUrl.value = null;
+  if (messageImageInputRef.value) {
+    messageImageInputRef.value.value = '';
+  }
+}
+
+async function handleMessageImageSelected(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file || !listing.value) {
+    return;
+  }
+
+  attachingMessageImage.value = true;
+  try {
+    pendingImageUrl.value = await uploadImage(file, listing.value.communityIds ?? []);
+  } catch (error) {
+    const toast = await toastController.create({
+      message: error instanceof Error ? error.message : 'Could not upload photo',
+      duration: 3000,
+      color: 'danger',
+    });
+    await toast.present();
+  } finally {
+    attachingMessageImage.value = false;
+    if (input) {
+      input.value = '';
+    }
+  }
+}
 
 const conversations = computed(() => {
   if (!listing.value || !isSeller.value) {
@@ -1512,6 +1577,20 @@ async function performRemoveListing() {
 .composer {
   --background: transparent;
   width: 100%;
+}
+
+.composer-file-input {
+  display: none;
+}
+
+.composer-attachment {
+  display: flex;
+  align-items: center;
+  gap: var(--fs-space-xs);
+  margin: 0;
+  padding: 0 var(--fs-page-inset-inline) var(--fs-space-xs);
+  color: var(--ion-color-medium);
+  font-size: 0.9rem;
 }
 
 .empty-state {

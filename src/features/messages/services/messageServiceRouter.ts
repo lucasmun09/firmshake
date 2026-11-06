@@ -15,12 +15,13 @@ export async function routeSendListingMessage(
   listingId: string,
   senderName: string,
   text: string,
-  options?: { recipientId?: string },
+  options?: { recipientId?: string; imageUrl?: string },
 ): Promise<Message> {
   if (useBffMessages()) {
     return messageBff.sendListingMessage(listingId, senderName, {
       text,
       recipientId: options?.recipientId,
+      imageUrl: options?.imageUrl,
     });
   }
   return messageFirestoreWrites.sendListingMessageViaFirestore(

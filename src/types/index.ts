@@ -133,6 +133,8 @@ export interface Message {
   senderId: string;
   senderName: string;
   text: string;
+  /** Optional chat photo URL (uploaded via `/api/images`). */
+  imageUrl?: string;
   recipientId?: string;
   createdAt?: Date;
 }

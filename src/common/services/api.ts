@@ -317,6 +317,7 @@ export interface BffMessageResponse {
   senderId: string;
   senderName: string;
   text: string;
+  imageUrl?: string;
   recipientId?: string;
   createdAt?: number | null;
 }
@@ -328,6 +329,7 @@ function mapBffMessageResponse(data: BffMessageResponse): Message {
     senderId: data.senderId,
     senderName: data.senderName,
     text: data.text,
+    imageUrl: data.imageUrl?.trim() || undefined,
     recipientId: data.recipientId,
     createdAt: data.createdAt ? new Date(data.createdAt) : undefined,
   };
@@ -341,7 +343,7 @@ async function parseBffMessageError(response: Response, fallback: string): Promi
 export async function sendListingMessageViaBff(
   listingId: string,
   senderName: string,
-  input: { text: string; recipientId?: string },
+  input: { text: string; recipientId?: string; imageUrl?: string },
 ): Promise<Message> {
   if (!isApiConfigured()) {
     throw new Error(getApiUnavailableMessage());
@@ -359,6 +361,7 @@ export async function sendListingMessageViaBff(
         text: input.text,
         senderName,
         recipientId: input.recipientId,
+        imageUrl: input.imageUrl,
       }),
     },
     {

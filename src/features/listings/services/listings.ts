@@ -304,6 +304,23 @@ export async function markListingSold(
   return routeMarkListingSold(listingId, actor);
 }
 
+/**
+ * Active seller listings are guest-readable (Firestore: signed-in OR status==active).
+ * Skip the signed-in auth probe for anonymous viewers so /seller/:id works for guests.
+ */
+export async function readyForSellerListingsRead(): Promise<'signed-in' | 'guest'> {
+  if (auth?.currentUser) {
+    await ensureFirestoreAuth();
+    return 'signed-in';
+  }
+
+  if (auth) {
+    await auth.authStateReady();
+  }
+
+  return 'guest';
+}
+
 export function subscribeSellerListings(
   sellerId: string,
   onData: (listings: Listing[]) => void,
@@ -323,13 +340,16 @@ export function subscribeSellerListings(
     where('status', '==', 'active'),
   );
 
-  void ensureFirestoreAuth()
-    .then(() => {
+  void readyForSellerListingsRead()
+    .then((mode) => {
       if (cancelled || !db) {
         return;
       }
 
-      debugLog.debug('listing', 'subscribeSellerListings: Firestore auth ready', { sellerId });
+      debugLog.debug('listing', 'subscribeSellerListings: Firestore ready', {
+        sellerId,
+        mode,
+      });
 
       snapshotUnsub = attachRetriableSnapshot(
         (onSnapshotError) => onSnapshot(
@@ -359,7 +379,7 @@ export function subscribeSellerListings(
         onError?.(error instanceof Error ? error : new SessionExpiredError());
         return;
       }
-      debugLog.warn('listing', 'subscribeSellerListings: ensureFirestoreAuth failed', {
+      debugLog.warn('listing', 'subscribeSellerListings: ready failed', {
         sellerId,
         error: serializeError(error),
       });

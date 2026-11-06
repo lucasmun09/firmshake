@@ -6,6 +6,10 @@ import {
   createOptimisticMessage,
   sendListingMessage,
 } from '@/features/messages/services/messages';
+import {
+  normalizeMessageImageUrl,
+  resolveMessageTextForSend,
+} from '@/features/messages/utils/messageImage';
 import type { Message } from '@/types';
 
 type ScrollTarget = Ref<InstanceType<typeof IonContent> | null> | ComputedRef<InstanceType<typeof IonContent> | null>;
@@ -17,6 +21,7 @@ export function useListingChat(
   const internalMessages = ref<Message[]>([]);
   const messages = externalMessages ?? internalMessages;
   const messageText = ref('');
+  const pendingImageUrl = ref<string | null>(null);
   const sending = ref(false);
   const contentRef = ref<InstanceType<typeof IonContent> | null>(null);
 
@@ -45,8 +50,15 @@ export function useListingChat(
     options?: { recipientId?: string },
   ): Promise<void> {
     const user = currentUser.value;
-    const trimmed = messageText.value.trim();
-    if (!user || !trimmed || sending.value) {
+    const imageUrl = normalizeMessageImageUrl(pendingImageUrl.value ?? undefined);
+    let textForSend: string;
+    try {
+      textForSend = resolveMessageTextForSend(messageText.value, imageUrl);
+    } catch {
+      return;
+    }
+
+    if (!user || sending.value) {
       return;
     }
 
@@ -55,17 +67,20 @@ export function useListingChat(
       listingId,
       user.uid,
       senderName,
-      trimmed,
+      textForSend,
       options?.recipientId,
+      imageUrl,
     );
 
     messages.value = [...messages.value, optimistic];
     messageText.value = '';
+    pendingImageUrl.value = null;
     sending.value = true;
 
     try {
-      await sendListingMessage(listingId, senderName, trimmed, {
+      await sendListingMessage(listingId, senderName, textForSend, {
         recipientId: options?.recipientId,
+        imageUrl,
       });
     } catch (error) {
       messages.value = messages.value.filter((message) => message.id !== optimistic.id);
@@ -78,6 +93,7 @@ export function useListingChat(
   return {
     messages,
     messageText,
+    pendingImageUrl,
     sending,
     contentRef,
     scrollToLatest,

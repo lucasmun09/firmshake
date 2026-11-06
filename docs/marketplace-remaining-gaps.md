@@ -1,6 +1,6 @@
 # Remaining gaps — full marketplace (no payments)
 
-Honest checklist vs a shippable marketplace **without** a payment processor. Updated 2026-11-05 (share + seller profile + buyer report).
+Honest checklist vs a shippable marketplace **without** a payment processor. Updated 2026-11-05 (message image attachments).
 
 Agent-store copy: Project store `docs/remaining-gaps.md`.
 
@@ -27,7 +27,7 @@ Payments / Stripe / escrow = **out of scope** (Phase 6+). Mock meetup deposits s
 | **Public seller profile page** | **Done** | `/seller/:sellerId` + guest BFF `GET …/users/:uid/public` |
 | **Share / copy listing link** | **Done** | Web Share API with clipboard fallback |
 | **Listing report / abuse flag** | **Done** | Buyer `listingReports` + Firestore rules |
-| Message image attachments | Open | Text only |
+| **Message image attachments** | **Done** | Optional `imageUrl` on messages; composer attach + bubble render |
 
 ## Dual-stack / prod readiness
 
@@ -44,7 +44,7 @@ Payments / Stripe / escrow = **out of scope** (Phase 6+). Mock meetup deposits s
 
 | Area | Status | Notes |
 |---|---|---|
-| Unit (browse, auth, dual-stack, saved, threads, share, seller, report) | **Done** | Targeted suites green |
+| Unit (browse, auth, dual-stack, saved, threads, share, seller, report, message image) | **Done** | Targeted suites green |
 | Cypress smoke (auth, browse, listing, stack.devo) | **Done** (soft) | Soft smoke also hits share control + seller profile nav |
 | Broader integration tests | **Done** (Vitest) | `tests/unit/integration/marketplace*.spec.ts` + API `test_marketplace_flow_no_payments.py` — see `docs/marketplace-integration-gaps.md` |
 
@@ -52,9 +52,9 @@ Payments / Stripe / escrow = **out of scope** (Phase 6+). Mock meetup deposits s
 
 1. ~~Mark listing sold~~ **Done**
 2. ~~Cypress mark-sold + blocked/map soft smoke~~ **Done**
-3. ~~Share listing link~~ **Done** this turn
-4. ~~Public seller profile (lightweight)~~ **Done** this turn
-5. ~~Buyer report listing~~ **Done** this turn
-6. Description full-text search when product wants it
-7. Message image attachments
+3. ~~Share listing link~~ **Done**
+4. ~~Public seller profile (lightweight)~~ **Done**
+5. ~~Buyer report listing~~ **Done**
+6. ~~Message image attachments~~ **Done** this turn
+7. Description full-text search when product wants it
 8. Deepen MFA `marketplace.flow` when secrets present in CI

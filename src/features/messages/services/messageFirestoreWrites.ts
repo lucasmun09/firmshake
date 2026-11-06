@@ -11,6 +11,11 @@ import { createNotification } from '@/features/messages/services/notifications';
 import { getListingById } from '@/features/listings/services/listings';
 import { syncMessageThreads } from '@/features/messages/services/threads';
 import type { Message } from '@/types';
+import {
+  normalizeMessageImageUrl,
+  resolveMessagePreviewText,
+  resolveMessageTextForSend,
+} from '@/features/messages/utils/messageImage';
 
 async function notifyMessageRecipient(
   listingId: string,
@@ -53,7 +58,7 @@ export async function sendListingMessageViaFirestore(
   listingId: string,
   senderName: string,
   text: string,
-  options?: { recipientId?: string },
+  options?: { recipientId?: string; imageUrl?: string },
 ): Promise<Message> {
   if (!db) {
     throw new Error('Firestore is not configured');
@@ -66,10 +71,8 @@ export async function sendListingMessageViaFirestore(
     throw new Error('You must be signed in to send messages');
   }
 
-  const trimmed = text.trim();
-  if (!trimmed) {
-    throw new Error('Message cannot be empty');
-  }
+  const imageUrl = normalizeMessageImageUrl(options?.imageUrl);
+  const trimmed = resolveMessageTextForSend(text, imageUrl);
 
   const listing = await getListingById(listingId);
   if (!listing) {
@@ -90,13 +93,18 @@ export async function sendListingMessageViaFirestore(
   }
 
   const createdAt = Timestamp.now();
-  const docRef = await addDoc(collection(db, 'listings', listingId, 'messages'), {
+  const payload: Record<string, unknown> = {
     senderId: user.uid,
     senderName,
     text: trimmed,
     createdAt,
     recipientId,
-  });
+  };
+  if (imageUrl) {
+    payload.imageUrl = imageUrl;
+  }
+
+  const docRef = await addDoc(collection(db, 'listings', listingId, 'messages'), payload);
 
   const message: Message = {
     id: docRef.id,
@@ -104,6 +112,7 @@ export async function sendListingMessageViaFirestore(
     senderId: user.uid,
     senderName,
     text: trimmed,
+    imageUrl,
     recipientId,
     createdAt: createdAt.toDate(),
   };
@@ -119,7 +128,7 @@ export async function sendListingMessageViaFirestore(
       listingId,
       user.uid,
       senderName,
-      trimmed,
+      resolveMessagePreviewText(trimmed, imageUrl),
       recipientId,
     );
   } catch (error) {

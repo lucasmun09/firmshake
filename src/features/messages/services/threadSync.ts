@@ -7,6 +7,7 @@ import {
   resolveBuyerFromMessage,
   sellerThreadDocId,
 } from '@/features/messages/services/threadModel';
+import { resolveMessagePreviewText } from '@/features/messages/utils/messageImage';
 
 async function getConversationParticipantIds(
   listing: Listing,
@@ -47,7 +48,10 @@ export async function writeSellerConversationThread(
       listingStatus: listing.status,
       sellerId: listing.sellerId,
       sellerName: listing.sellerName,
-      lastMessageText: lastMessage.text,
+      lastMessageText: resolveMessagePreviewText(
+        lastMessage.text,
+        lastMessage.imageUrl,
+      ),
       lastMessageSenderId: lastMessage.senderId,
       lastMessageSenderName: lastMessage.senderName,
       lastMessageAt: lastMessage.createdAt
@@ -86,7 +90,7 @@ async function writeThreadForUser(
       listingStatus: listing.status,
       sellerId: listing.sellerId,
       sellerName: listing.sellerName,
-      lastMessageText: message.text,
+      lastMessageText: resolveMessagePreviewText(message.text, message.imageUrl),
       lastMessageSenderId: message.senderId,
       lastMessageSenderName: message.senderName,
       lastMessageAt: Timestamp.now(),
@@ -115,7 +119,7 @@ async function writeThreadForUser(
       listingStatus: listing.status,
       sellerId: listing.sellerId,
       sellerName: listing.sellerName,
-      lastMessageText: message.text,
+      lastMessageText: resolveMessagePreviewText(message.text, message.imageUrl),
       lastMessageSenderId: message.senderId,
       lastMessageSenderName: message.senderName,
       lastMessageAt: Timestamp.now(),

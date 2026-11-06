@@ -66,8 +66,38 @@ describe('messageServiceRouter', () => {
     expect(sendMessageBff).toHaveBeenCalledWith('listing-1', 'Buyer Bob', {
       text: 'Hello',
       recipientId: undefined,
+      imageUrl: undefined,
     });
     expect(sendMessageFirestore).not.toHaveBeenCalled();
+  });
+
+  it('forwards imageUrl through both routers', async () => {
+    const { routeSendListingMessage } = await import(
+      '@/features/messages/services/messageServiceRouter'
+    );
+
+    await routeSendListingMessage('listing-1', 'Buyer Bob', 'Photo', {
+      recipientId: 'seller-1',
+      imageUrl: 'https://cdn/x.jpg',
+    });
+
+    expect(sendMessageFirestore).toHaveBeenCalledWith(
+      'listing-1',
+      'Buyer Bob',
+      'Photo',
+      { recipientId: 'seller-1', imageUrl: 'https://cdn/x.jpg' },
+    );
+
+    useBffMessages.mockReturnValue(true);
+    await routeSendListingMessage('listing-1', 'Buyer Bob', 'Photo', {
+      imageUrl: 'https://cdn/x.jpg',
+    });
+
+    expect(sendMessageBff).toHaveBeenCalledWith('listing-1', 'Buyer Bob', {
+      text: 'Photo',
+      recipientId: undefined,
+      imageUrl: 'https://cdn/x.jpg',
+    });
   });
 
   it('shouldRouteMessagesViaBff reflects flag', async () => {
