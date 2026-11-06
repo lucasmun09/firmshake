@@ -19,7 +19,7 @@ Nothing console-side for this doc — use it when editing stack code so agents d
 | Prod readiness checklist (cross-repo) | `scripts/check-prod-readiness.sh` (`npm run check:prod-readiness`) |
 | Devo hosting deploy | `scripts/deploy-devo-hosting.sh` |
 | Prod hosting deploy | `scripts/deploy-prod-hosting.sh` |
-| CI promote | `.github/workflows/deploy-web.yml` |
+| CI promote | `docs/ci-workflows/deploy-web.yml` (copy into `.github/workflows/` with `workflow` scope) |
 
 Meetup deposit CTAs read `isPaymentsEnabled()` / `PAYMENTS_DISABLED_USER_MESSAGE` from `paymentsFlag` (not featureFlags).
 
