@@ -31,8 +31,9 @@ export type DevoMockWallet = {
  * Enable deovo SMS enrollment bypass and mark the signed-in account setup complete
  * so router guards stop redirecting to `/mfa-enroll`.
  *
- * Does **not** satisfy Firebase MFA challenge for already-enrolled factors —
- * use Google sign-in or a Firebase test phone for that path.
+ * Does **not** satisfy Firebase MFA *challenge* (`/mfa-challenge`) for already-enrolled
+ * factors — the user must enter a real or Firebase Console test SMS code. Navigating
+ * away from challenge without completing MFA leaves no session (looks logged out).
  */
 export async function bypassDevoSmsVerification(): Promise<{
   bypassEnabled: boolean;
