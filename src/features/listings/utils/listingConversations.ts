@@ -1,6 +1,7 @@
 import type { ListingConversation, Message } from '@/types';
 
-function sortMessages(messages: Message[]): Message[] {
+/** Oldest → newest for chat bubbles (composer sits below the latest message). */
+export function sortMessagesChronological(messages: Message[]): Message[] {
   return [...messages].sort((left, right) => {
     const leftTime = left.createdAt?.getTime() ?? 0;
     const rightTime = right.createdAt?.getTime() ?? 0;
@@ -11,16 +12,12 @@ function sortMessages(messages: Message[]): Message[] {
   });
 }
 
+/** @deprecated Prefer sortMessagesChronological for chat UI. */
 export function sortMessagesNewestFirst(messages: Message[]): Message[] {
-  return [...messages].sort((left, right) => {
-    const leftTime = left.createdAt?.getTime() ?? 0;
-    const rightTime = right.createdAt?.getTime() ?? 0;
-    if (leftTime !== rightTime) {
-      return rightTime - leftTime;
-    }
-    return right.id.localeCompare(left.id);
-  });
+  return [...sortMessagesChronological(messages)].reverse();
 }
+
+const sortMessages = sortMessagesChronological;
 
 export function groupMessagesByBuyer(
   messages: Message[],

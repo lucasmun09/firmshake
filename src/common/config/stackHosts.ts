@@ -33,6 +33,55 @@ export const CONTROLPANEL_HOSTING_ORIGIN = 'https://firmshake-controlpanel.web.a
 /** Staging Cloud Run hostname fragment used by deploy assert guards. */
 export const DEVO_API_HOST_MARKER = 'firmshake-api-staging';
 
+export type AdminToolbarSite = {
+  id: 'controlpanel' | 'controlpanel-local' | 'logs';
+  label: string;
+  href: string;
+  /** Open in a new browsing context (external CP). */
+  external: boolean;
+};
+
+/**
+ * Admin-only toolbar destinations.
+ * Controlpanel is always the hosted deovo site; local CP is DEV-only.
+ * Logs is same-origin `/logs` (opens a new tab so IndexedDB leases stay isolated).
+ */
+export function resolveAdminToolbarSites(options?: {
+  isDev?: boolean;
+  origin?: string;
+}): AdminToolbarSite[] {
+  const isDev = options?.isDev ?? Boolean(import.meta.env.DEV);
+  const origin =
+    options?.origin ??
+    (typeof window !== 'undefined' ? window.location.origin : '');
+
+  const sites: AdminToolbarSite[] = [
+    {
+      id: 'controlpanel',
+      label: 'Controlpanel',
+      href: CONTROLPANEL_HOSTING_ORIGIN,
+      external: true,
+    },
+    {
+      id: 'logs',
+      label: 'Logs',
+      href: `${origin.replace(/\/$/, '')}/logs`,
+      external: true,
+    },
+  ];
+
+  if (isDev) {
+    sites.splice(1, 0, {
+      id: 'controlpanel-local',
+      label: 'Local CP',
+      href: 'http://localhost:5174',
+      external: true,
+    });
+  }
+
+  return sites;
+}
+
 export function normalizeHostname(hostname: string | undefined): string {
   return (hostname ?? '').trim().toLowerCase().replace(/\.$/, '');
 }

@@ -48,7 +48,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { scheduleTabPrefetch } from '@/common/services/tabPrefetch';
 import { authReady, currentUser } from '@/features/auth/services/auth';
@@ -114,12 +114,6 @@ function normalizePath(path: string): string {
   return path.replace(/\/$/, '') || '/';
 }
 
-function releaseTabNavigationLock() {
-  window.setTimeout(() => {
-    tabNavigationPending.value = false;
-  }, 200);
-}
-
 function onTabClick(event: Event, path: string) {
   const currentPath = normalizePath(route.path);
   const targetPath = normalizePath(path);
@@ -133,6 +127,7 @@ function onTabClick(event: Event, path: string) {
 
   if (currentPath === targetPath) {
     event.preventDefault();
+    tabNavigationPending.value = false;
     return;
   }
 
@@ -156,15 +151,37 @@ function onTabClick(event: Event, path: string) {
   tabNavigationPending.value = true;
   debugLog.debug('app', 'Tab navigation', { from: currentPath, to: targetPath });
 
-  try {
-    ionRouter.navigate(path, 'root', 'replace');
-  } catch (err) {
-    tabNavigationPending.value = false;
-    debugLog.warn('app', 'Tab navigation failed', { from: currentPath, to: targetPath, err });
-    throw err;
-  }
-
-  releaseTabNavigationLock();
+  void (async () => {
+    try {
+      await Promise.resolve(ionRouter.navigate(path, 'root', 'replace'));
+      // If Ionic swallows the navigation, force a Vue Router replace so tabs
+      // cannot stay stuck on the previous route (see firmshake logs 2026-11-06).
+      if (normalizePath(route.path) === currentPath) {
+        debugLog.warn('app', 'Tab navigation did not change route; forcing router.replace', {
+          from: currentPath,
+          to: targetPath,
+          routeAfter: route.path,
+        });
+        const { default: router } = await import('@/router');
+        await router.replace(path);
+      }
+    } catch (err) {
+      debugLog.warn('app', 'Tab navigation failed', {
+        from: currentPath,
+        to: targetPath,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      tabNavigationPending.value = false;
+    }
+  })();
 }
+
+watch(
+  () => route.path,
+  () => {
+    tabNavigationPending.value = false;
+  },
+);
 </script>
 

@@ -25,13 +25,28 @@
           </template>
 
           <template v-else>
+            <div v-if="showAdminBadge" class="admin-toolbar-links" data-testid="admin-toolbar-links">
+              <a
+                v-for="site in adminSites"
+                :key="site.id"
+                class="admin-toolbar-link"
+                :href="site.href"
+                :target="site.external ? '_blank' : undefined"
+                :rel="site.external ? 'noopener noreferrer' : undefined"
+                :data-testid="`admin-link-${site.id}`"
+              >
+                {{ site.label }}
+              </a>
+            </div>
+
             <button
-              id="toolbar-profile-menu"
+              :id="profileMenuTriggerId"
               type="button"
               class="profile-menu-trigger"
               aria-label="Profile menu"
               aria-haspopup="menu"
               data-testid="toolbar-profile-menu"
+              @click="profileMenuOpen = true"
             >
               <div class="profile-text">
                 <span v-if="showAdminBadge" class="admin-badge admin-badge--inline">ADMIN</span>
@@ -50,11 +65,13 @@
             </button>
 
             <ion-popover
-              trigger="toolbar-profile-menu"
+              :is-open="profileMenuOpen"
+              :trigger="profileMenuTriggerId"
               dismiss-on-select
               side="bottom"
               alignment="end"
               class="profile-menu-popover"
+              @didDismiss="profileMenuOpen = false"
             >
               <ion-content>
                 <ion-list lines="none" class="profile-menu-list">
@@ -122,6 +139,7 @@ import { logOutOutline, notificationsOutline, settingsOutline } from 'ionicons/i
 import NotificationPanel from '@/features/messages/components/NotificationPanel.vue';
 import FirmShakeLogo from '@/components/FirmShakeLogo.vue';
 import UserAvatar from '@/components/UserAvatar.vue';
+import { resolveAdminToolbarSites } from '@/common/config/stackHosts';
 import { bootstrapProfile } from '@/common/services/appBootstrap';
 import {
   formatToolbarTitle,
@@ -150,8 +168,11 @@ const titleLines = computed(() => splitToolbarTitle(props.title));
 const avatarSize = computed(() => (isMobileWebViewport() ? 'sm' : 'xs'));
 
 const notificationsOpen = ref(false);
+const profileMenuOpen = ref(false);
 const unreadCount = ref(0);
 const ionRouter = useIonRouter();
+/** Unique per toolbar instance — Ionic caches tab pages, so a fixed id breaks the popover. */
+const profileMenuTriggerId = `toolbar-profile-menu-${Math.random().toString(36).slice(2, 10)}`;
 
 const profile = bootstrapProfile;
 
@@ -160,6 +181,9 @@ const isGuest = computed(
 );
 
 const showAdminBadge = computed(() => isSuperAdmin(profile.value));
+const adminSites = computed(() =>
+  showAdminBadge.value ? resolveAdminToolbarSites() : [],
+);
 const profileDisplayName = computed(
   () => profile.value?.displayName ?? resolveSessionUser()?.displayName ?? 'FirmShake User',
 );
@@ -170,10 +194,12 @@ const profileEmail = computed(
 let unsubscribeNotifications: (() => void) | undefined;
 
 function goToSettings() {
+  profileMenuOpen.value = false;
   ionRouter.navigate('/tabs/profile', 'forward', 'push');
 }
 
 async function handleLogout() {
+  profileMenuOpen.value = false;
   await logout();
   ionRouter.navigate('/login', 'root', 'replace');
 }
@@ -354,6 +380,34 @@ onUnmounted(() => {
   text-align: end;
 }
 
+.admin-toolbar-links {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  margin-inline-end: 0.15rem;
+}
+
+.admin-toolbar-link {
+  display: inline-flex;
+  align-items: center;
+  height: 1.55rem;
+  padding: 0 0.45rem;
+  border-radius: 0.3rem;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  color: var(--fs-toolbar-contrast);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.admin-toolbar-link:hover,
+.admin-toolbar-link:focus-visible {
+  background: rgba(255, 255, 255, 0.14);
+}
+
 .profile-menu-trigger {
   display: inline-flex;
   align-items: center;
@@ -366,6 +420,8 @@ onUnmounted(() => {
   cursor: pointer;
   font: inherit;
   max-width: min(100%, 22rem);
+  position: relative;
+  z-index: 2;
 }
 
 .profile-menu-trigger:focus-visible {
