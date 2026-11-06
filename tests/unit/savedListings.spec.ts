@@ -3,11 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearListingPrefsIfUserChanged,
   clearSavedListings,
+  getSavedListingTombstones,
   getSavedListings,
   isListingSaved,
   saveListing,
   SAVED_LISTINGS_MAX,
   setSavedListings,
+  setSavedListingsState,
   toggleSavedListing,
   unsaveListing,
 } from '@/features/listings/services/savedListings';
@@ -103,6 +105,45 @@ describe('savedListings', () => {
     ]);
     expect(getSavedListings('user-a').map((entry) => entry.id)).toEqual(['b']);
     expect(isListingSaved('user-a', 'a')).toBe(false);
+  });
+
+  it('records a tombstone on unsave and clears it on save', () => {
+    saveListing('user-a', listing('a'), 10);
+    unsaveListing('user-a', 'a', 55);
+    expect(getSavedListings('user-a')).toEqual([]);
+    expect(getSavedListingTombstones('user-a')).toEqual([{ id: 'a', deletedAt: 55 }]);
+
+    saveListing('user-a', listing('a'), 80);
+    expect(isListingSaved('user-a', 'a')).toBe(true);
+    expect(getSavedListingTombstones('user-a')).toEqual([]);
+  });
+
+  it('keeps the newer tombstone when unsaving twice', () => {
+    unsaveListing('user-a', 'ghost', 10);
+    unsaveListing('user-a', 'ghost', 40);
+    expect(getSavedListingTombstones('user-a')).toEqual([{ id: 'ghost', deletedAt: 40 }]);
+  });
+
+  it('writes entries and tombstones together via setSavedListingsState', () => {
+    setSavedListingsState(
+      'user-a',
+      [
+        {
+          id: 'keep',
+          title: 'Keep',
+          price: 1,
+          imageUrl: 'https://example.com/keep.jpg',
+          savedAt: 1,
+        },
+      ],
+      [
+        { id: 'gone', deletedAt: 9 },
+        { id: 'keep', deletedAt: 99 }, // ignored because listing is saved
+      ],
+    );
+
+    expect(getSavedListings('user-a').map((entry) => entry.id)).toEqual(['keep']);
+    expect(getSavedListingTombstones('user-a')).toEqual([{ id: 'gone', deletedAt: 9 }]);
   });
 });
 

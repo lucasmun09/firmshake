@@ -23,16 +23,19 @@ import {
   stubLocalStorage,
 } from './marketplaceFixtures';
 
-const fetchRemote = vi.fn();
+const fetchRemoteState = vi.fn();
 const upsertRemote = vi.fn();
-const deleteRemote = vi.fn();
+const tombstoneRemote = vi.fn();
 const canSyncRemote = vi.fn();
 
 vi.mock('@/features/listings/services/savedListingsRemote', () => ({
   canSyncSavedListingsRemote: (...args: unknown[]) => canSyncRemote(...args),
-  fetchSavedListingsRemote: (...args: unknown[]) => fetchRemote(...args),
+  fetchSavedListingsRemoteState: (...args: unknown[]) => fetchRemoteState(...args),
+  fetchSavedListingsRemote: async (...args: unknown[]) =>
+    (await fetchRemoteState(...args)).entries,
   upsertSavedListingRemote: (...args: unknown[]) => upsertRemote(...args),
-  deleteSavedListingRemote: (...args: unknown[]) => deleteRemote(...args),
+  tombstoneSavedListingRemote: (...args: unknown[]) => tombstoneRemote(...args),
+  deleteSavedListingRemote: (...args: unknown[]) => tombstoneRemote(...args),
 }));
 
 vi.mock('@/common/debug/debugLog', () => ({
@@ -44,13 +47,13 @@ describe('integration — browse → detail → saved contracts', () => {
   beforeEach(() => {
     stubLocalStorage();
     setListingPrefsOwnerUid(BUYER_ID);
-    fetchRemote.mockReset();
+    fetchRemoteState.mockReset();
     upsertRemote.mockReset();
-    deleteRemote.mockReset();
+    tombstoneRemote.mockReset();
     canSyncRemote.mockReset();
     canSyncRemote.mockReturnValue(true);
     upsertRemote.mockResolvedValue(undefined);
-    deleteRemote.mockResolvedValue(undefined);
+    tombstoneRemote.mockResolvedValue(undefined);
   });
 
   it('saves a browse-summary shaped listing without requiring full detail fields', () => {
@@ -88,7 +91,10 @@ describe('integration — browse → detail → saved contracts', () => {
 
   it('hydrates by merging remote + local and pushing local-only bookmarks', async () => {
     saveListing(BUYER_ID, toListingSummary(makeFullListing()), 100);
-    fetchRemote.mockResolvedValue([makeSavedEntry({ id: 'remote-only', savedAt: 200 })]);
+    fetchRemoteState.mockResolvedValue({
+      entries: [makeSavedEntry({ id: 'remote-only', savedAt: 200 })],
+      tombstones: [],
+    });
 
     const { hydrateSavedListingsFromRemote } = await import(
       '@/features/listings/services/savedListingsSync'
@@ -101,6 +107,25 @@ describe('integration — browse → detail → saved contracts', () => {
       expect.objectContaining({ id: LISTING_ID }),
     );
     expect(getSavedListings(BUYER_ID)).toHaveLength(2);
+  });
+
+  it('keeps an unsaved bookmark deleted across hydrate when remote is stale', async () => {
+    saveListing(BUYER_ID, toListingSummary(makeFullListing()), 100);
+    unsaveListing(BUYER_ID, LISTING_ID, 250);
+    fetchRemoteState.mockResolvedValue({
+      entries: [makeSavedEntry({ savedAt: 100 })],
+      tombstones: [],
+    });
+
+    const { hydrateSavedListingsFromRemote } = await import(
+      '@/features/listings/services/savedListingsSync'
+    );
+    const merged = await hydrateSavedListingsFromRemote(BUYER_ID);
+
+    expect(merged).toEqual([]);
+    expect(isListingSaved(BUYER_ID, LISTING_ID)).toBe(false);
+    expect(tombstoneRemote).toHaveBeenCalledWith(BUYER_ID, LISTING_ID, 250);
+    expect(upsertRemote).not.toHaveBeenCalled();
   });
 
   it('keeps newer savedAt on merge conflicts and reports remote gaps', () => {
