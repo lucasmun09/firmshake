@@ -233,7 +233,7 @@ CYPRESS_BASE_URL=https://firmshake-dev.web.app npm run test:integration
 | `browse.filter.cy.ts` | ✓ | ✓ | Guest browse; search, filters, communities (auth) |
 | `listing.detail.cy.ts` | ✓ | ✓ | Guest listing detail + document title; auth edit guard |
 | `listing.upload.cy.ts` | partial | ✓ | Sell toolbar, backend wait modal, create listing (stubbed API) |
-| `settings.navigation.cy.ts` | partial | ✓ | Settings gear navigation, sub-page toolbar, auth redirect |
+| `settings.navigation.cy.ts` | partial | ✓ | Profile-menu Settings navigation, sub-page toolbar, auth redirect |
 | `profile.cy.ts` | partial | ✓ | Settings shortcuts; auth guard |
 | `messages.cy.ts` | — | ✓ | Inbox tab, threads, send message |
 | `buying.cy.ts` | partial | ✓ | Buying tab; auth guard |

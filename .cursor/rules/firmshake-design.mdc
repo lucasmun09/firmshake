@@ -136,7 +136,7 @@ Signed-in users always land on `/tabs/home`.
 
 **Terminology:** User-facing label is **Settings** (document title `firm-shake - Settings`). Route path stays `/tabs/profile`; internal route name `Profile`.
 
-**Header:** Toolbar avatar is display-only. **Settings** gear icon between avatar and notifications bell navigates to the settings page (`ProfilePage.vue`).
+**Header:** Toolbar profile (name/avatar) opens a popover with **Settings** (→ `ProfilePage.vue`) and **Log out**. No standalone gear icon; notifications bell stays beside the profile control.
 
 **Mobile toolbar (≤768px):** Title stacks two lines (`FirmShake -` / page name); display name hidden; **ADMIN** badge overlays avatar corner (not inline with title); logo, avatar (`sm`), and action icons scale up for the taller toolbar. Desktop keeps single-line title with name + inline admin badge.
 
