@@ -7,6 +7,7 @@ import {
   PROD_PUBLIC_HOSTNAMES,
   isProdPublicHostnameValue,
   normalizeHostname,
+  resolveAdminToolbarSites,
 } from '@/common/config/stackHosts';
 
 describe('stackHosts', () => {
@@ -30,5 +31,25 @@ describe('stackHosts', () => {
   it('keeps control panel deovo-only and staging API marker stable', () => {
     expect(CONTROLPANEL_HOSTING_ORIGIN).toBe('https://firmshake-controlpanel.web.app');
     expect(DEVO_API_HOST_MARKER).toBe('firmshake-api-staging');
+  });
+
+  it('resolves admin toolbar Controlpanel + Logs (and Local CP in DEV)', () => {
+    const prodLike = resolveAdminToolbarSites({
+      isDev: false,
+      origin: 'https://firmshake-dev.web.app',
+    });
+    expect(prodLike.map((s) => s.id)).toEqual(['controlpanel', 'logs']);
+    expect(prodLike[0]?.href).toBe(CONTROLPANEL_HOSTING_ORIGIN);
+    expect(prodLike[1]?.href).toBe('https://firmshake-dev.web.app/logs');
+
+    const local = resolveAdminToolbarSites({
+      isDev: true,
+      origin: 'http://localhost:5173',
+    });
+    expect(local.map((s) => s.id)).toEqual([
+      'controlpanel',
+      'controlpanel-local',
+      'logs',
+    ]);
   });
 });

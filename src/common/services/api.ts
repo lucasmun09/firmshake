@@ -978,7 +978,7 @@ export async function fetchInboxThreadsViaBff(options?: {
 
   const query = params.toString();
   const response = await loggedFetch(
-    `/api/v1/inbox/threads${query ? `?${query}` : ''}`,
+    `${getApiBaseUrl()}/api/v1/inbox/threads${query ? `?${query}` : ''}`,
     { headers: await authHeaders() },
   );
 
@@ -999,10 +999,13 @@ async function postInboxThreadAction(
   action: 'read' | 'archive' | 'unarchive',
   fallback: string,
 ): Promise<ReturnType<typeof mapBffInboxState>> {
-  const response = await loggedFetch(`/api/v1/inbox/threads/${encodeURIComponent(threadKey)}/${action}`, {
-    method: 'POST',
-    headers: await authHeaders(),
-  });
+  const response = await loggedFetch(
+    `${getApiBaseUrl()}/api/v1/inbox/threads/${encodeURIComponent(threadKey)}/${action}`,
+    {
+      method: 'POST',
+      headers: await authHeaders(),
+    },
+  );
 
   if (!response.ok) {
     throw new Error(await parseBffInboxError(response, fallback));

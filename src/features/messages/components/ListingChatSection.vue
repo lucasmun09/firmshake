@@ -148,7 +148,7 @@ import MessageBubbleSkeleton from '@/components/skeletons/MessageBubbleSkeleton.
 import type { ListingConversation, Message } from '@/types';
 import type { ParticipantProfile } from '@/common/composables/useParticipantProfiles';
 import { formatMessageTimestamp } from '@/utils/dateTime';
-import { sortMessagesNewestFirst } from '@/features/listings/utils/listingConversations';
+import { sortMessagesChronological } from '@/features/listings/utils/listingConversations';
 import { MESSAGE_IMAGE_PREVIEW_TEXT } from '@/features/messages/utils/messageImage';
 
 const props = withDefaults(
@@ -186,7 +186,7 @@ defineEmits<{
   'toggle-block': [];
 }>();
 
-const orderedMessages = computed(() => sortMessagesNewestFirst(props.displayMessages));
+const orderedMessages = computed(() => sortMessagesChronological(props.displayMessages));
 
 const headerTitle = computed(() => {
   if (props.isSeller && props.selectedBuyerId) {

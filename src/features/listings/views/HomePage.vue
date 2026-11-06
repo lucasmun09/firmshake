@@ -396,6 +396,7 @@ import {
   IonSpinner,
   IonThumbnail,
   IonToolbar,
+  onIonViewWillLeave,
 } from '@ionic/vue';
 import { addOutline, menuOutline } from 'ionicons/icons';
 import type { DocumentSnapshot } from 'firebase/firestore';
@@ -2534,6 +2535,11 @@ watch(effectiveViewMode, (mode) => {
   if (normalized === 'map') {
     refreshMapListingsIfActive();
   }
+});
+
+onIonViewWillLeave(() => {
+  closeSidebar();
+  document.body.classList.remove('browse-sidebar-open');
 });
 
 onUnmounted(() => {
