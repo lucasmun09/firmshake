@@ -190,7 +190,7 @@ npm run firebase:seed
 | `VITE_FIREBASE_APP_ID` | Web app ID |
 | `VITE_FIREBASE_VAPID_KEY` | Web push VAPID key (Cloud Messaging) |
 | `VITE_API_BASE_URL` | Staging/local API URL (prod uses a separate Cloud Run URL) |
-| `VITE_PAYMENTS_ENABLED` | Meetup deposits; unset/`true` on deovo, `false` on prod |
+| `VITE_PAYMENTS_ENABLED` | Deposits; unset/`true` on deovo (mock only), `false` on prod — no processor this phase |
 
 Prod template: `.env.production.example`. Firebase CLI aliases: `devo` → `firmshake-dev`, `prod` → `firmshake-prod` (`.firebaserc`).
 

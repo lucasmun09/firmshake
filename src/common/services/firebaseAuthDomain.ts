@@ -80,6 +80,10 @@ export function buildFirebaseAuthRedirectUri(authDomain: string): string {
 /**
  * Redirect URIs that must exist on the Firebase auto-created OAuth 2.0 Web client
  * when the app resolves authDomain to each hosting hostname (see resolveFirebaseAuthDomain).
+ *
+ * Custom domains (`firm-shake.com` / `www`) belong on the **prod** OAuth client after
+ * Hosting cutover. Pass `includeCustomDomains: true` for deovo only while those domains
+ * still serve firmshake-dev.
  */
 export function listRequiredGoogleOAuthRedirectUris(options: {
   projectId?: string | null;
@@ -93,7 +97,11 @@ export function listRequiredGoogleOAuthRedirectUris(options: {
     uris.add(buildFirebaseAuthRedirectUri(`${projectId}.web.app`));
   }
 
-  if (options.includeCustomDomains !== false) {
+  const includeCustom =
+    options.includeCustomDomains === true
+    || (options.includeCustomDomains !== false && projectId === 'firmshake-prod');
+
+  if (includeCustom) {
     uris.add(buildFirebaseAuthRedirectUri('firm-shake.com'));
     uris.add(buildFirebaseAuthRedirectUri('www.firm-shake.com'));
   }

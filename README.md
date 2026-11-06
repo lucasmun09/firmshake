@@ -14,9 +14,9 @@ The Flask API lives in a **separate repo**: [`firmshake-api`](../firmshake-api) 
 | Auth | Firebase Authentication | this repo |
 | Database | Cloud Firestore | this repo |
 | API + Images | Flask | **firmshake-api** |
-| Payments (later) | Stripe | firmshake-api |
+| Deposits (this phase) | Mock on deovo; disabled on prod — no processor | firmshake-api |
 
-**Environments:** deovo (`firmshake-dev`) and prod (`firmshake-prod`) — see [docs/devo-prod-stacks.md](docs/devo-prod-stacks.md).
+**Environments:** deovo (`firmshake-dev`) and prod (`firmshake-prod`) — see [docs/devo-prod-stacks.md](docs/devo-prod-stacks.md), [prod cutover](docs/prod-cutover-runbook.md), [CI promote](docs/ci-promote-pipeline.md).
 
 ## Quick start
 
@@ -132,9 +132,11 @@ Integration tests use **Cypress** against the Vite dev server. Unit tests use **
 
 ```bash
 npm run test:unit
+# Dual-stack / payments-disabled contracts only:
+npm run test:unit:dual-stack
 ```
 
-Runs Vitest (router guards, API health retries, guest auth UI, page titles, etc.). No dev server required.
+Runs Vitest (router guards, API health retries, guest auth UI, page titles, dual-stack, etc.). No dev server required.
 
 ### Integration / E2E tests
 
@@ -209,9 +211,10 @@ Requires GitHub Environments `devo` and `prod` with separate `VITE_*` / Firebase
 Local deploy:
 
 ```bash
-npm run deploy:hosting:devo   # daily path (alias: npm run deploy:hosting)
+npm run deploy:hosting:devo   # daily path (alias: npm run deploy:hosting); Vite --mode devo
 npm run deploy:prod           # firmshake-prod — needs .env.production.local (see .env.production.example)
 npm run firebase:setup:prod   # write prod SDK config to .env.production.local
+# Note: plain `vite build` loads .env.production.local — never use it for firmshake-dev deploys.
 ```
 
 ```bash

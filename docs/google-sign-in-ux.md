@@ -13,17 +13,27 @@ Complete these steps in **Firebase Console** and **Google Cloud Console** before
 
 ### 2. Add Authorized domains (Firebase)
 
-1. Open [Firebase Console → Authentication → Settings → Authorized domains](https://console.firebase.google.com/project/firmshake-dev/authentication/settings).
-2. Click **Add domain** for every hostname users visit (skip if already listed):
+Do this **per Firebase project**. Open Authentication → Settings → Authorized domains for that project.
+
+**firmshake-dev (deovo / beta) — desired after domain cutover:**
 
 | Hostname | When |
 |---|---|
 | `localhost` | Local dev (usually present by default) |
 | `firmshake-dev.web.app` | Devo Hosting |
-| `firm-shake.com` | Production custom domain |
-| `www.firm-shake.com` | Production www |
+| `firmshake-dev.firebaseapp.com` | Alternate Firebase Hosting hostname |
 
-For prod Firebase project, also add `firmshake-prod.web.app`.
+**Transitional (keep while `firm-shake.com` still serves firmshake-dev Hosting):** also add `firm-shake.com` and `www.firm-shake.com` on **devo**. Remove them from deovo after cutover (see [`docs/devo-prod-stacks.md`](./devo-prod-stacks.md)).
+
+**firmshake-prod (production):**
+
+| Hostname | When |
+|---|---|
+| `localhost` | Local prod builds / testing |
+| `firmshake-prod.web.app` | Prod Hosting (pre-cutover URL) |
+| `firmshake-prod.firebaseapp.com` | Alternate Firebase Hosting hostname |
+| `firm-shake.com` | Production apex |
+| `www.firm-shake.com` | Production www |
 
 ### 3. Register OAuth redirect URIs (Google Cloud)
 
@@ -33,23 +43,28 @@ The app resolves `authDomain` to the **page hostname** on Hosting (see `firebase
 redirect_uri=https://<page-host>/__/auth/handler
 ```
 
-Each origin must be registered on the Firebase auto-created OAuth client.
+Each origin must be registered on the Firebase auto-created OAuth client **for that GCP project**.
 
-1. Open [Google Cloud Console → APIs & Credentials](https://console.cloud.google.com/apis/credentials?project=firmshake-dev).
+1. Open [Google Cloud Console → APIs & Credentials](https://console.cloud.google.com/apis/credentials?project=firmshake-dev) (switch project to `firmshake-prod` for prod).
 2. Confirm the project matches your Firebase project (`firmshake-dev` or `firmshake-prod`).
 3. Under **OAuth 2.0 Client IDs**, open **Web client (auto created by Google Service)**.
 4. Under **Authorized redirect URIs**, click **Add URI** and paste **every** URI for your stack (one per line):
 
-**firmshake-dev** — copy/paste block:
+**firmshake-dev — desired after cutover:**
 
 ```
 https://firmshake-dev.firebaseapp.com/__/auth/handler
 https://firmshake-dev.web.app/__/auth/handler
+```
+
+**firmshake-dev — transitional (while apex still on deovo Hosting):** also add:
+
+```
 https://firm-shake.com/__/auth/handler
 https://www.firm-shake.com/__/auth/handler
 ```
 
-**firmshake-prod** — copy/paste block:
+**firmshake-prod — copy/paste block:**
 
 ```
 https://firmshake-prod.firebaseapp.com/__/auth/handler
@@ -58,7 +73,7 @@ https://firm-shake.com/__/auth/handler
 https://www.firm-shake.com/__/auth/handler
 ```
 
-**localhost** — only this URI (app keeps `{projectId}.firebaseapp.com` as authDomain locally):
+**localhost** — app keeps `{projectId}.firebaseapp.com` as authDomain locally (use the deovo or prod firebaseapp.com handler for whichever project your `.env` points at):
 
 ```
 https://firmshake-dev.firebaseapp.com/__/auth/handler
@@ -132,9 +147,12 @@ VITE_GOOGLE_WEB_CLIENT_ID=1234567890-xxxx.apps.googleusercontent.com
 ```
 http://localhost:5173
 https://firmshake-dev.web.app
+https://firmshake-prod.web.app
 https://firm-shake.com
 https://www.firm-shake.com
 ```
+
+(Use deovo origins on the deovo GIS client; prod origins on the prod client. Do not mix stacks.)
 
 4. **Redeploy** hosting (or restart dev server) after changing `VITE_GOOGLE_WEB_CLIENT_ID`.
 

@@ -82,7 +82,7 @@
               {{ busy ? 'Processing...' : `Pay $${agreement.depositAmount} deposit` }}
             </ion-button>
             <ion-button v-else expand="block" disabled>
-              Payments coming soon
+              {{ paymentsDisabledMessage }}
             </ion-button>
           </div>
 
@@ -137,7 +137,7 @@ import {
   toastController,
 } from '@ionic/vue';
 
-import { isPaymentsEnabled } from '@/common/config/featureFlags';
+import { isPaymentsEnabled, PAYMENTS_DISABLED_USER_MESSAGE } from '@/common/config/paymentsFlag';
 import { formatMeetupLocation } from '@/features/meetups/utils/meetupLocation';
 import {
   acceptMeetupProposal,
@@ -162,6 +162,7 @@ const busy = ref(false);
 const agreement = ref<Agreement | null>(null);
 const listing = ref<Listing | null>(null);
 const paymentsEnabled = isPaymentsEnabled();
+const paymentsDisabledMessage = PAYMENTS_DISABLED_USER_MESSAGE;
 
 let unsubscribeAgreement: (() => void) | undefined;
 

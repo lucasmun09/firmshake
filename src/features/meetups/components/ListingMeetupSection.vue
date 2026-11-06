@@ -106,7 +106,7 @@
         class="meetup-cta"
         disabled
       >
-        Payments coming soon
+        {{ paymentsDisabledMessage }}
       </ion-button>
 
       <ion-button
@@ -148,7 +148,7 @@ import {
   formatMeetupTime,
   getAgreementStatusLabel,
 } from '@/common/services/agreements';
-import { isPaymentsEnabled } from '@/common/config/featureFlags';
+import { isPaymentsEnabled, PAYMENTS_DISABLED_USER_MESSAGE } from '@/common/config/paymentsFlag';
 import type { Agreement } from '@/types';
 
 const props = defineProps<{
@@ -161,6 +161,7 @@ const props = defineProps<{
 }>();
 
 const paymentsEnabled = isPaymentsEnabled();
+const paymentsDisabledMessage = PAYMENTS_DISABLED_USER_MESSAGE;
 
 defineEmits<{
   accept: [agreementId: string];

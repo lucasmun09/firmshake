@@ -78,7 +78,7 @@
         {{ busy ? 'Processing...' : `Pay $${agreement.depositAmount} deposit` }}
       </ion-button>
       <ion-button v-else expand="block" disabled>
-        Payments coming soon
+        {{ paymentsDisabledMessage }}
       </ion-button>
     </div>
 
@@ -115,7 +115,7 @@ import {
   getAgreementStatusLabel,
   startMeetupEnRoute,
 } from '@/common/services/agreements';
-import { isPaymentsEnabled } from '@/common/config/featureFlags';
+import { isPaymentsEnabled, PAYMENTS_DISABLED_USER_MESSAGE } from '@/common/config/paymentsFlag';
 import { formatMeetupLocation } from '@/features/meetups/utils/meetupLocation';
 import { currentUser } from '@/features/auth/services/auth';
 import type { Agreement } from '@/types';
@@ -130,6 +130,7 @@ const props = defineProps<{
 const router = useRouter();
 const busy = ref(false);
 const paymentsEnabled = isPaymentsEnabled();
+const paymentsDisabledMessage = PAYMENTS_DISABLED_USER_MESSAGE;
 
 const isSeller = computed(() => props.role === 'seller');
 const isBuyer = computed(() => props.role === 'buyer');

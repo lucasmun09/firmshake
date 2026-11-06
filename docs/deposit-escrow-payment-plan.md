@@ -2,6 +2,8 @@
 
 Plan only — **no implementation** in this document. Completes the Phase 6 payments story sketched in [`MILESTONES.md`](./MILESTONES.md), [`ARCHITECTURE.md`](./ARCHITECTURE.md), and [`BFF_PLAN.md`](./BFF_PLAN.md). Cross-links the App Store payments decision in [`app-store-release-plan.md`](./app-store-release-plan.md).
 
+> **Dual-stack / prod launch status:** FirmShake ships the deovo+prod dual-stack **without a payment processor**. Prod keeps `PAYMENTS_ENABLED=false` / `VITE_PAYMENTS_ENABLED=false`; deovo may use **mock** deposits only. This document is future Phase 6 architecture — it is **not** a cutover checklist and does **not** schedule Stripe for the dual-stack launch. See [`devo-prod-stacks.md`](./devo-prod-stacks.md).
+
 ---
 
 ## Executive summary

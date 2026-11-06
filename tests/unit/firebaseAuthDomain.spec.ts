@@ -105,10 +105,27 @@ describe('buildFirebaseAuthRedirectUri', () => {
 });
 
 describe('listRequiredGoogleOAuthRedirectUris', () => {
-  it('lists project and custom domain handlers for deovo', () => {
+  it('lists only deovo hosting handlers by default (custom domains are prod)', () => {
     const uris = listRequiredGoogleOAuthRedirectUris({ projectId: 'firmshake-dev' });
     expect(uris).toContain('https://firmshake-dev.firebaseapp.com/__/auth/handler');
     expect(uris).toContain('https://firmshake-dev.web.app/__/auth/handler');
+    expect(uris).not.toContain('https://firm-shake.com/__/auth/handler');
+    expect(uris).not.toContain('https://www.firm-shake.com/__/auth/handler');
+  });
+
+  it('includes custom domains for prod by default', () => {
+    const uris = listRequiredGoogleOAuthRedirectUris({ projectId: 'firmshake-prod' });
+    expect(uris).toContain('https://firmshake-prod.firebaseapp.com/__/auth/handler');
+    expect(uris).toContain('https://firmshake-prod.web.app/__/auth/handler');
+    expect(uris).toContain('https://firm-shake.com/__/auth/handler');
+    expect(uris).toContain('https://www.firm-shake.com/__/auth/handler');
+  });
+
+  it('allows transitional custom domains on deovo when explicitly requested', () => {
+    const uris = listRequiredGoogleOAuthRedirectUris({
+      projectId: 'firmshake-dev',
+      includeCustomDomains: true,
+    });
     expect(uris).toContain('https://firm-shake.com/__/auth/handler');
     expect(uris).toContain('https://www.firm-shake.com/__/auth/handler');
   });

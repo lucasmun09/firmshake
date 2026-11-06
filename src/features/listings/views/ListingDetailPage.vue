@@ -265,7 +265,7 @@ import {
   subscribeListingAgreements,
 } from '@/common/services/agreements';
 import { authReady, currentUser } from '@/features/auth/services/auth';
-import { isPaymentsEnabled } from '@/common/config/featureFlags';
+import { isPaymentsEnabled, PAYMENTS_DISABLED_USER_MESSAGE } from '@/common/config/paymentsFlag';
 import { debugLog, serializeError } from '@/common/debug/debugLog';
 import {
   bootstrapCommunities,
@@ -1040,7 +1040,7 @@ async function handleDeclineProposal(agreementId: string) {
 async function handlePayDeposit(agreementId: string) {
   if (!isPaymentsEnabled()) {
     const toast = await toastController.create({
-      message: 'Payments are not available in this environment yet.',
+      message: PAYMENTS_DISABLED_USER_MESSAGE,
       duration: 3000,
       color: 'medium',
     });
@@ -1056,7 +1056,7 @@ async function handlePayDeposit(agreementId: string) {
   try {
     await confirmMeetupDeposit(agreementId, user.uid);
     const toast = await toastController.create({
-      message: 'Deposit confirmed. Stripe payments arrive in the next milestone.',
+      message: 'Deposit confirmed.',
       duration: 3000,
       color: 'success',
     });

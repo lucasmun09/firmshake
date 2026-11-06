@@ -66,11 +66,14 @@ API-specific milestones are tracked in **firmshake-api**.
 | En route + location polling | Done |
 | Flask ETA calculation | firmshake-api `/api/meetups/{id}/location` |
 | Privacy: ETA only to other party | Server-side Firestore updates |
-| Stripe deposit collection | Phase 6 |
+| Dual-stack deovo/prod (no payment processor) | In progress — see [`devo-prod-stacks.md`](./devo-prod-stacks.md) |
+| Stripe deposit collection | Phase 6 — **not** part of dual-stack launch |
 
 ## Phase 6–7
 
 Stripe deposits → full payments + no-show penalties.
+
+**Scope note:** Dual-stack / first prod ship keeps `PAYMENTS_ENABLED=false` on prod and mock-only on deovo. Do not treat Phase 6 as a dual-stack cutover blocker. Architecture plan remains in [`deposit-escrow-payment-plan.md`](./deposit-escrow-payment-plan.md).
 
 ---
 

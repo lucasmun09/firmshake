@@ -181,7 +181,8 @@ async function onDownloadLogs() {
 <style scoped>
 .devo-debug-banner {
   position: relative;
-  z-index: 10000;
+  z-index: 11;
+  flex: 0 0 auto;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
