@@ -40,6 +40,12 @@ export default defineConfig({
   },
   test: {
     globals: true,
-    environment: 'jsdom'
-  }
+    environment: 'jsdom',
+    // Node 22+/26: jsdom localStorage throws on opaque origins unless a URL is set.
+    environmentOptions: {
+      jsdom: {
+        url: 'http://localhost/',
+      },
+    },
+  },
 })
