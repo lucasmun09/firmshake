@@ -1,0 +1,201 @@
+name: Deploy Web
+
+# Promote: merge to main → deovo → integration tests → prod (on green).
+# Web may still push on `master` briefly; prefer `main` going forward.
+# See docs/devo-prod-stacks.md.
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Deploy target (full = deovo→tests→prod)"
+        required: true
+        default: full
+        type: choice
+        options:
+          - full
+          - deovo
+          - prod
+
+concurrency:
+  group: deploy-web-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy_devo:
+    name: Deploy deovo
+    if: >
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && (inputs.target == 'full' || inputs.target == 'devo'))
+    runs-on: ubuntu-latest
+    environment: deovo
+    env:
+      PROJECT_ID: firmshake-dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build (devo)
+        run: npm run build:devo
+        env:
+          VITE_APP_STACK: deovo
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL || 'https://firmshake-api-staging-858269838319.us-central1.run.app' }}
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+          VITE_FIREBASE_VAPID_KEY: ${{ secrets.VITE_FIREBASE_VAPID_KEY }}
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+          VITE_GOOGLE_WEB_CLIENT_ID: ${{ secrets.VITE_GOOGLE_WEB_CLIENT_ID }}
+          VITE_RECAPTCHA_SITE_KEY: ${{ secrets.VITE_RECAPTCHA_SITE_KEY }}
+          # Devo: mock deposit UX only (no Stripe). Override secret to false to hide CTAs.
+          VITE_PAYMENTS_ENABLED: ${{ secrets.VITE_PAYMENTS_ENABLED || 'true' }}
+          VITE_USE_BFF_LISTINGS: "true"
+          VITE_USE_BFF_AGREEMENTS: "true"
+          VITE_USE_BFF_USERS: "true"
+          VITE_USE_BFF_MESSAGES: "false"
+          # Devo staging QA: inbox BFF poll + cursor pages. Prod job keeps false below.
+          VITE_USE_BFF_INBOX: "true"
+          VITE_USE_BFF_BROWSE: "true"
+
+      - name: Generate Firebase messaging config
+        run: |
+          cat > public/firebase-messaging-config.json <<EOF
+          {
+            "apiKey": "${{ secrets.VITE_FIREBASE_API_KEY }}",
+            "authDomain": "${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}",
+            "projectId": "${{ secrets.VITE_FIREBASE_PROJECT_ID }}",
+            "storageBucket": "${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}",
+            "messagingSenderId": "${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}",
+            "appId": "${{ secrets.VITE_FIREBASE_APP_ID }}"
+          }
+          EOF
+          cp public/firebase-messaging-config.json dist/firebase-messaging-config.json
+
+      - name: Assert deovo dist (no prod cross-wire)
+        run: bash scripts/assert-baked-stack.sh deovo dist
+
+      # TODO(wif): migrate FIREBASE_SERVICE_ACCOUNT JSON → Workload Identity Federation
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: ${{ env.PROJECT_ID }}
+          channelId: live
+
+  integration_tests:
+    name: Integration tests (devo)
+    needs: deploy_devo
+    if: >
+      always() &&
+      needs.deploy_devo.result == 'success' &&
+      (github.event_name == 'push' ||
+       (github.event_name == 'workflow_dispatch' && inputs.target == 'full'))
+    runs-on: ubuntu-latest
+    environment: deovo
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # Guest-only smoke first; add MFA specs when CYPRESS_TEST_*_MFA secrets exist on env `devo`.
+      - name: Guest smoke against deovo
+        uses: cypress-io/github-action@v6
+        with:
+          install: false
+          browser: chrome
+          spec: tests/e2e/specs/guest.routes.cy.ts,tests/e2e/specs/stack.devo.cy.ts
+        env:
+          CYPRESS_BASE_URL: ${{ secrets.CYPRESS_BASE_URL || 'https://firmshake-dev.web.app' }}
+          CYPRESS_TEST_EMAIL_MFA: ${{ secrets.CYPRESS_TEST_EMAIL_MFA }}
+          CYPRESS_TEST_PASSWORD_MFA: ${{ secrets.CYPRESS_TEST_PASSWORD_MFA }}
+
+  deploy_prod:
+    name: Deploy prod
+    needs: [deploy_devo, integration_tests]
+    # Soft gate: set repo variable PROD_DEPLOY_ENABLED=true after firmshake-prod + Environment `prod` secrets exist.
+    if: >
+      always() &&
+      vars.PROD_DEPLOY_ENABLED == 'true' &&
+      (
+        (github.event_name == 'push' && needs.integration_tests.result == 'success') ||
+        (github.event_name == 'workflow_dispatch' && inputs.target == 'prod') ||
+        (github.event_name == 'workflow_dispatch' && inputs.target == 'full' && needs.integration_tests.result == 'success')
+      )
+    runs-on: ubuntu-latest
+    environment: prod
+    env:
+      PROJECT_ID: firmshake-prod
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build (prod)
+        run: npm run build -- --mode production
+        env:
+          VITE_APP_STACK: prod
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+          VITE_FIREBASE_VAPID_KEY: ${{ secrets.VITE_FIREBASE_VAPID_KEY }}
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+          VITE_GOOGLE_WEB_CLIENT_ID: ${{ secrets.VITE_GOOGLE_WEB_CLIENT_ID }}
+          VITE_RECAPTCHA_SITE_KEY: ${{ secrets.VITE_RECAPTCHA_SITE_KEY }}
+          VITE_PAYMENTS_ENABLED: ${{ secrets.VITE_PAYMENTS_ENABLED || 'false' }}
+          VITE_USE_BFF_LISTINGS: "true"
+          VITE_USE_BFF_AGREEMENTS: "true"
+          VITE_USE_BFF_USERS: "true"
+          VITE_USE_BFF_MESSAGES: "false"
+          VITE_USE_BFF_INBOX: "false"
+          VITE_USE_BFF_BROWSE: "true"
+
+      - name: Generate Firebase messaging config
+        run: |
+          cat > public/firebase-messaging-config.json <<EOF
+          {
+            "apiKey": "${{ secrets.VITE_FIREBASE_API_KEY }}",
+            "authDomain": "${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}",
+            "projectId": "${{ secrets.VITE_FIREBASE_PROJECT_ID }}",
+            "storageBucket": "${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}",
+            "messagingSenderId": "${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}",
+            "appId": "${{ secrets.VITE_FIREBASE_APP_ID }}"
+          }
+          EOF
+          cp public/firebase-messaging-config.json dist/firebase-messaging-config.json
+
+      - name: Assert prod dist (no deovo cross-wire)
+        run: bash scripts/assert-baked-stack.sh prod dist
+
+      # TODO(wif): migrate FIREBASE_SERVICE_ACCOUNT JSON → Workload Identity Federation
+      # Requires firmshake-prod project + GitHub Environment `prod` secrets (see docs/devo-prod-stacks.md).
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: ${{ env.PROJECT_ID }}
+          channelId: live

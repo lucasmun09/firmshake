@@ -1,0 +1,366 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc(uid) {
+      return get(/databases/$(database)/documents/users/$(uid));
+    }
+
+    function userData(uid) {
+      let profileDoc = userDoc(uid);
+      return profileDoc != null ? profileDoc.data : null;
+    }
+
+    function callerData() {
+      return userData(request.auth.uid);
+    }
+
+    function isSuperAdminAccount(uid) {
+      let profile = userData(uid);
+      return profile != null
+        && (profile.get('isSuperAdmin', false) == true || profile.get('isAdmin', false) == true);
+    }
+
+    function isSuperAdminCaller() {
+      return isSignedIn() && isSuperAdminAccount(request.auth.uid);
+    }
+
+    function callerModeratorCommunityIds() {
+      let profile = callerData();
+      return profile == null ? [] : profile.get('moderatorCommunityIds', []);
+    }
+
+    function sharesModeratedCommunity(communityIds) {
+      return communityIds.hasAny(callerModeratorCommunityIds());
+    }
+
+    function onlyModeratorCommunityIdsChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['moderatorCommunityIds']);
+    }
+
+    function validCommunityModeratorAccessChange() {
+      let oldIds = resource.data.get('moderatorCommunityIds', []);
+      let newIds = request.resource.data.moderatorCommunityIds;
+      let callerMods = callerModeratorCommunityIds();
+      return (
+        (newIds.size() == oldIds.size() + 1 && newIds.hasAll(oldIds) && newIds.hasAny(callerMods))
+        || (oldIds.size() == newIds.size() + 1 && oldIds.hasAll(newIds) && oldIds.hasAny(callerMods))
+      );
+    }
+
+    function protectedProfileFieldsChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['moderatorCommunityIds', 'isSuperAdmin', 'isAdmin']);
+    }
+
+    function isAccountSetupCompletion(userId) {
+      return request.auth.uid == userId
+        && resource.data.get('accountSetupComplete', true) == false
+        && request.resource.data.accountSetupComplete == true
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['accountSetupComplete', 'profileComplete']);
+    }
+
+    function isListingRemovalUpdate() {
+      return request.resource.data.status == 'removed'
+        && resource.data.status == 'active'
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'removedAt', 'removedBy', 'updatedAt']);
+    }
+
+    function sellerCanUpdateListing() {
+      return isSignedIn()
+        && request.auth.uid == resource.data.sellerId
+        && resource.data.status == 'active';
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.isSuperAdmin != true
+        && request.resource.data.isAdmin != true
+        && request.resource.data.get('moderatorCommunityIds', []).size() == 0;
+
+      allow update: if isSignedIn()
+        && request.auth.uid == userId
+        && !protectedProfileFieldsChanged();
+
+      allow update: if isSignedIn() && isAccountSetupCompletion(userId);
+
+      allow update: if isSignedIn()
+        && request.auth.uid != userId
+        && !isSuperAdminAccount(userId)
+        && onlyModeratorCommunityIdsChanged()
+        && (
+          isSuperAdminCaller()
+          || (
+            sharesModeratedCommunity(request.resource.data.moderatorCommunityIds)
+            && validCommunityModeratorAccessChange()
+          )
+        );
+
+      allow delete: if isSignedIn()
+        && request.auth.uid == userId
+        && (
+          resource.data.get('accountSetupComplete', true) == false
+          || (
+            !('accountSetupComplete' in resource.data)
+            && resource.data.get('authProvider', '') == 'password'
+          )
+        );
+
+      match /notifications/{notificationId} {
+        allow read, update: if isSignedIn() && request.auth.uid == userId;
+        allow create: if isSignedIn()
+          && request.resource.data.actorId == request.auth.uid
+          && request.resource.data.recipientId == userId
+          && request.resource.data.type in ['message', 'meetup', 'system']
+          && request.resource.data.title is string
+          && request.resource.data.body is string
+          && request.resource.data.read == false;
+        allow delete: if false;
+      }
+
+      match /inboxState/{listingId} {
+        // Owner read/write kept during BFF Phase 5 — inboxState may also be updated via
+        // /api/v1/inbox/threads/{key}/read|archive|unarchive when VITE_USE_BFF_INBOX=true.
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
+
+      match /fcmTokens/{tokenId} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
+
+      match /threads/{listingId} {
+        allow read: if isSignedIn() && request.auth.uid == userId;
+        allow create, update: if isSignedIn()
+          && (
+            request.auth.uid == userId
+            || request.resource.data.updatedBy == request.auth.uid
+          );
+        allow delete: if false;
+      }
+
+      match /messageListings/{listingId} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
+
+      match /blockedUsers/{blockedUserId} {
+        allow read: if isSignedIn()
+          && (
+            request.auth.uid == userId
+            || request.auth.uid == blockedUserId
+          );
+        allow write: if isSignedIn() && request.auth.uid == userId;
+      }
+
+      // Saved listings / bookmarks — owner-only; localStorage remains the instant cache.
+      // See docs/saved-listings-sync.md.
+      match /savedListings/{listingId} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
+    }
+
+    match /listings/{listingId} {
+      // BFF Phase 1: listing writes migrate to firmshake-api (/api/v1/listings).
+      // Client writes remain allowed during dual-write rollout (VITE_USE_BFF_LISTINGS).
+      //
+      // PRODUCTION ROLLOUT: After VITE_USE_BFF_LISTINGS=true everywhere, replace create/update
+      // with deny rules below (uncomment). Until then, legacy Firestore writes must keep working.
+      //
+      // allow create: if false;
+      // allow update: if false;
+      allow read: if isSignedIn()
+        || resource.data.status == 'active';
+      allow create: if isSignedIn()
+        && request.resource.data.sellerId == request.auth.uid
+        && request.resource.data.status == 'active';
+      allow update: if sellerCanUpdateListing()
+        || (isSignedIn() && isListingRemovalUpdate() && (
+          isSuperAdminCaller()
+          || sharesModeratedCommunity(resource.data.communityIds)
+        ));
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        // BFF Phase 2: message writes migrate to firmshake-api
+        // (/api/v1/listings/{id}/messages). Client writes remain allowed during
+        // dual-write rollout (VITE_USE_BFF_MESSAGES defaults false).
+        //
+        // PRODUCTION ROLLOUT: After VITE_USE_BFF_MESSAGES=true everywhere, deny create:
+        //
+        // allow create: if false;
+        allow read: if isSignedIn()
+          && request.auth.uid == get(/databases/$(database)/documents/listings/$(listingId)).data.sellerId;
+
+        allow read: if isSignedIn()
+          && (
+            resource.data.senderId == request.auth.uid
+            || resource.data.recipientId == request.auth.uid
+          );
+
+        allow create: if isSignedIn()
+          && request.resource.data.senderId == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() <= 1000
+          && (
+            request.resource.data.text.size() > 0
+            || (
+              request.resource.data.keys().hasAll(['imageUrl'])
+              && request.resource.data.imageUrl is string
+              && request.resource.data.imageUrl.size() > 0
+              && request.resource.data.imageUrl.size() <= 2048
+            )
+          )
+          && (
+            !('imageUrl' in request.resource.data)
+            || (
+              request.resource.data.imageUrl is string
+              && request.resource.data.imageUrl.size() > 0
+              && request.resource.data.imageUrl.size() <= 2048
+            )
+          )
+          && request.resource.data.recipientId is string
+          && request.resource.data.recipientId.size() > 0
+          && (
+            (
+              request.auth.uid != get(/databases/$(database)/documents/listings/$(listingId)).data.sellerId
+              && request.resource.data.recipientId == get(/databases/$(database)/documents/listings/$(listingId)).data.sellerId
+              && !exists(/databases/$(database)/documents/users/$(get(/databases/$(database)/documents/listings/$(listingId)).data.sellerId)/blockedUsers/$(request.auth.uid))
+            )
+            || (
+              request.auth.uid == get(/databases/$(database)/documents/listings/$(listingId)).data.sellerId
+              && request.resource.data.recipientId != request.auth.uid
+              && !exists(/databases/$(database)/documents/users/$(request.resource.data.recipientId)/blockedUsers/$(request.auth.uid))
+            )
+          );
+
+        allow update, delete: if false;
+      }
+    }
+
+    // Phase 3 BFF migration: agreement writes move to firmshake-api (/api/v1/agreements).
+    // Client writes remain allowed while VITE_USE_BFF_AGREEMENTS defaults off in production.
+    //
+    // PRODUCTION ROLLOUT: After VITE_USE_BFF_AGREEMENTS=true everywhere, replace create/update
+    // with deny rules (uncomment). Until then, legacy client transitions must keep working.
+    //
+    // allow create: if false;
+    // allow update: if false;
+    match /agreements/{agreementId} {
+      allow read: if isSignedIn()
+        && (request.auth.uid == resource.data.buyerId
+          || request.auth.uid == resource.data.sellerId);
+
+      allow create: if isSignedIn()
+        && request.resource.data.listingId is string
+        && request.resource.data.buyerId == request.auth.uid
+        && request.resource.data.sellerId is string
+        && request.resource.data.buyerName is string
+        && request.resource.data.price is number
+        && request.resource.data.meetupLat is number
+        && request.resource.data.meetupLng is number
+        && request.resource.data.meetupAt is timestamp
+        && request.resource.data.depositAmount is number
+        && request.resource.data.depositAmount >= 10
+        && request.resource.data.status == 'proposed';
+
+      allow update: if isSignedIn()
+        && (request.auth.uid == resource.data.buyerId
+          || request.auth.uid == resource.data.sellerId)
+        && (
+          (
+            request.auth.uid == resource.data.sellerId
+            && resource.data.status == 'proposed'
+            && request.resource.data.status in ['accepted', 'cancelled']
+          )
+          || (
+            request.auth.uid == resource.data.buyerId
+            && resource.data.status == 'proposed'
+            && request.resource.data.status == 'cancelled'
+          )
+          || (
+            request.auth.uid == resource.data.buyerId
+            && resource.data.status == 'accepted'
+            && request.resource.data.status == 'deposit_paid'
+          )
+          || (
+            resource.data.status == 'deposit_paid'
+            && request.resource.data.status == 'en_route'
+          )
+          || (
+            request.resource.data.status == 'cancelled'
+            && resource.data.status in ['accepted', 'deposit_paid', 'en_route']
+            && (request.auth.uid == resource.data.buyerId
+              || request.auth.uid == resource.data.sellerId)
+          )
+        );
+    }
+
+    match /communities/{communityId} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && (
+          (
+            communityId == 'all'
+            && !exists(/databases/$(database)/documents/communities/$(communityId))
+          )
+          || (
+            request.resource.data.type == 'user'
+            && request.resource.data.createdBy == request.auth.uid
+            && request.resource.data.name is string
+            && request.resource.data.name.size() > 0
+          )
+        );
+      allow update, delete: if false;
+    }
+
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /communityFeeds/{communityId} {
+      allow read: if true;
+
+      match /listings/{listingId} {
+        allow read: if true;
+        allow write: if false;
+      }
+    }
+
+    match /images/{imageId} {
+      allow read, write: if false;
+    }
+
+    match /platformBans/{banId} {
+      allow read, write: if false;
+    }
+
+    match /controlpanelOperators/{operatorId} {
+      allow read, write: if false;
+    }
+
+    // Buyer abuse flags — create by signed-in reporters only; review is admin/ops.
+    match /listingReports/{reportId} {
+      allow create: if isSignedIn()
+        && request.resource.data.reporterId == request.auth.uid
+        && request.resource.data.listingId is string
+        && request.resource.data.listingId.size() > 0
+        && request.resource.data.sellerId is string
+        && request.resource.data.sellerId.size() > 0
+        && request.resource.data.sellerId != request.auth.uid
+        && request.resource.data.reason in ['spam_scam', 'inappropriate', 'prohibited', 'other']
+        && request.resource.data.status == 'open'
+        && request.resource.data.details is string
+        && request.resource.data.details.size() <= 500;
+      allow read: if isSignedIn() && isSuperAdminCaller();
+      allow update, delete: if false;
+    }
+  }
+}

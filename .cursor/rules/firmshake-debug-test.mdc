@@ -1,0 +1,55 @@
+---
+description: Debugging with structured logs and regression testing with targeted unit tests
+alwaysApply: true
+---
+
+# FirmShake debug & test discipline
+
+When investigating or changing behavior, favor observable diagnostics and targeted regression tests.
+
+## Structured logs (preferred for feature debugging)
+
+The app ships a **standalone `/logs` route** (`src/features/debug/views/LogsPage.vue`) that boots without Firebase (`main-logs.ts`) so logging does not compete with the main tab for Firestore persistence.
+
+**API:** `debugLog.debug|info|warn|error(category, message, data?)` in `src/common/debug/debugLog.ts`.
+
+| Practice | Detail |
+|---|---|
+| Category | Short domain slug: `auth`, `browse`, `listing-detail`, `mfa`, `cache`, etc. |
+| Message | Imperative phase label: `loadListing.start`, `prefetchBuffer.done` |
+| Data | Plain objects only; use `serializeError()` for caught errors |
+| When to log | Multi-step flows, cache hits/misses, race/discarded generations, auth/MFA transitions |
+| Inspect | Open `/logs` in a separate tab; share via email/download/copy buttons on that page |
+
+**Do not** rely on `console.log` alone for flows that are hard to reproduce — add `debugLog` entries that survive refresh.
+
+## Unit tests for behavior changes
+
+Any change to **logic, parsing, cache keys, thresholds, or error mapping** needs unit coverage in `tests/unit/`.
+
+| Change type | Test location pattern |
+|---|---|
+| New util / service | `tests/unit/<module>.spec.ts` |
+| Bug fix | Add a regression case to the nearest existing spec |
+| UI-only spacing/CSS | Optional layout contract test in `tests/unit/spacingTokens.spec.ts` |
+
+Follow existing Vitest patterns (`describe` / `it`, no network unless mocked).
+
+## Targeted test runs (not always full suite)
+
+After edits, run **only specs related to touched modules**:
+
+```bash
+npm run test:unit -- --run tests/unit/browseSearchPrefetch.spec.ts tests/unit/spacingTokens.spec.ts
+```
+
+Run the full suite (`npm run test:unit -- --run`) before merge or when changes touch shared infrastructure (`auth.ts`, `responseCache.ts`, router guards).
+
+## Checklist before deploy
+
+1. Add/update `debugLog` when debugging multi-step or hard-to-reproduce features.
+2. Add/update unit tests for behavior changes.
+3. Run targeted unit tests for touched specs; report pass/fail.
+4. Deploy hosting when UI/CSS/components change (`npm run deploy:hosting`).
+
+Cross-reference **Boot / startup** (`main-logs` split) in `firmshake-design.mdc`.

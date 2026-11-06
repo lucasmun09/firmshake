@@ -1,0 +1,87 @@
+/*
+ * Wide-viewport layout: keep chrome full width, cap main content to a 4:3
+ * column based on viewport height. Portrait / mobile aspect ratios are unchanged.
+ *
+ * Spacing standards: .cursor/rules/firmshake-spacing.mdc
+ */
+
+.app-content-frame {
+  box-sizing: border-box;
+  width: 100%;
+  padding-inline: var(--fs-page-inset-inline);
+  padding-block-start: var(--fs-page-inset-block-start, var(--fs-page-inset-block));
+  padding-block-end: var(--fs-page-inset-block-end, var(--fs-page-inset-block));
+}
+
+.app-content-frame--flush-x {
+  padding-inline: 0;
+}
+
+.app-content-frame--flush-y {
+  padding-block-start: 0;
+  padding-block-end: 0;
+}
+
+.app-content-frame--compact-y {
+  padding-block-start: var(--fs-space-sm);
+  padding-block-end: var(--fs-space-sm);
+}
+
+ion-toolbar.app-toolbar-content {
+  --padding-start: 0;
+  --padding-end: 0;
+  --color: var(--ion-text-color);
+  --background: var(--ion-toolbar-background, var(--ion-background-color));
+}
+
+ion-header ion-toolbar.app-toolbar-content {
+  --color: var(--ion-text-color);
+}
+
+ion-content.app-tab-content {
+  --padding-start: 0;
+  --padding-end: 0;
+  --padding-top: 0;
+  --padding-bottom: 0;
+}
+
+.app-form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-form-field-gap);
+}
+
+.app-form-stack > ion-item,
+.app-form-stack > .form-section {
+  margin: 0;
+}
+
+.app-section-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-section-gap);
+}
+
+/* reCAPTCHA v3 injects a floating badge; disclosure lives on login/register pages. */
+.grecaptcha-badge {
+  visibility: hidden !important;
+}
+
+@media (min-aspect-ratio: 4/3) {
+  .app-content-frame {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: calc(100vh * 4 / 3);
+    margin-inline: auto;
+  }
+
+  ion-toolbar.app-toolbar-content {
+    --padding-start: 0;
+    --padding-end: 0;
+  }
+
+  ion-tab-bar.app-chrome-full {
+    width: 100%;
+    max-width: none;
+  }
+}

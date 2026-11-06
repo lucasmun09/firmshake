@@ -1,0 +1,7 @@
+{
+  "projects": {
+    "default": "firmshake-dev",
+    "devo": "firmshake-dev",
+    "prod": "firmshake-prod"
+  }
+}

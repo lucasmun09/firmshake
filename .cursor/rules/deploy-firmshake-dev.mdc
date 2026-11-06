@@ -1,0 +1,51 @@
+---
+description: Deploy FirmShake changes to firmshake-dev after completing work
+alwaysApply: true
+---
+
+# Deploy to firmshake-dev
+
+After completing user-requested changes that affect the running app, deploy to **firmshake-dev** (devo) without waiting to be asked again. Do **not** deploy half-baked prod until `firmshake-prod` exists and CI secrets are ready. Dual-stack details: `docs/devo-prod-stacks.md`.
+
+## Web app (this repo)
+
+When frontend, Firestore rules, or hosting config change:
+
+```bash
+npm run deploy:hosting
+# same as: npm run deploy:hosting:devo
+```
+
+If only Firestore rules changed:
+
+```bash
+npm run firebase:deploy-rules
+```
+
+- **Hosting URL:** https://firmshake-dev.web.app
+- **Firebase project:** `firmshake-dev` (alias `devo`)
+- Build uses `.env.local` locally; CI uses GitHub Environment `devo` secrets.
+- Prod hosting: `npm run deploy:hosting:prod` only with prod `VITE_*` baked in.
+
+## API (`firmshake-api` sibling repo)
+
+When API code or Cloud Run env changes:
+
+```bash
+cd ../firmshake-api && bash scripts/deploy-staging.sh
+# alias: bash scripts/deploy-devo.sh
+```
+
+- **API URL:** https://firmshake-api-staging-858269838319.us-central1.run.app
+- Prod: `bash scripts/deploy-prod.sh` (us-east1) after project scaffolding.
+
+## When to skip deploy
+
+- Question-only or review-only tasks with no code changes
+- User explicitly says not to deploy
+- Dual-stack scaffolding / docs-only with no user-visible UI change
+- Deploy fails — report the error; do not silently skip
+
+## After deploy
+
+Tell the user what was deployed and the URL(s).

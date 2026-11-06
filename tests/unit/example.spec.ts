@@ -1,10 +1,9 @@
-import { mount } from '@vue/test-utils'
-import HomePage from '@/views/HomePage.vue'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, it } from 'vitest';
 
-describe('HomePage.vue', () => {
-  test('renders home vue', () => {
-    const wrapper = mount(HomePage)
-    expect(wrapper.text()).toMatch('Ready to create an app?')
-  })
-})
+describe('data format smoke tests', () => {
+  it('category seed ids are unique', async () => {
+    const { SEED_CATEGORIES } = await import('@/features/listings/data/seedCategories');
+    const ids = SEED_CATEGORIES.map((category) => category.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});

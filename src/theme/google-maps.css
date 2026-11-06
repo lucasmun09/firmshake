@@ -1,0 +1,17 @@
+/* PlaceAutocompleteElement dropdown must sit above Ionic headers/modals */
+gmp-place-autocomplete {
+  color-scheme: light dark;
+  width: 100%;
+}
+
+.pac-container {
+  z-index: 20000 !important;
+}
+
+.pac-item {
+  font-family: inherit;
+}
+
+.rough-location__map .gm-style > div {
+  border-radius: 12px;
+}

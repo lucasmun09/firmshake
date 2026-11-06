@@ -1,0 +1,8 @@
+{
+  "testEmail": "e2e-test@firmshake.dev",
+  "testPassword": "ChangeMe-E2E-123!",
+  "listingTitle": "Cypress Test Listing",
+  "listingDescription": "Automated e2e listing — safe to delete.",
+  "listingPrice": 42,
+  "communityName": "Cypress E2E Community"
+}

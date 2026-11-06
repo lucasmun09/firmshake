@@ -1,0 +1,220 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PROJECT_ID="${FIREBASE_PROJECT_ID:-firmshake-dev}"
+DISPLAY_NAME="${FIREBASE_DISPLAY_NAME:-FirmShake Dev}"
+WEB_APP_NAME="${FIREBASE_WEB_APP_NAME:-FirmShake Web}"
+FIRESTORE_LOCATION="${FIRESTORE_LOCATION:-us-west2}"
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ENV_FILE="${FIREBASE_ENV_FILE:-$ROOT_DIR/.env.local}"
+
+echo "==> FirmShake Firebase setup"
+echo "    Project ID: $PROJECT_ID"
+
+if firebase login:list 2>&1 | grep -qi "no authorized"; then
+  echo "ERROR: Not logged into Firebase. Run: firebase login"
+  exit 1
+fi
+
+firebase projects:list --json > /tmp/firmshake-projects.json 2>/dev/null || echo '{"result":[]}' > /tmp/firmshake-projects.json
+PROJECT_EXISTS="$(python3 -c "
+import json
+projects = json.load(open('/tmp/firmshake-projects.json')).get('result', [])
+print('yes' if any(p.get('projectId') == '$PROJECT_ID' for p in projects) else '')
+")"
+
+if [ -z "$PROJECT_EXISTS" ]; then
+  echo "==> Creating Firebase project..."
+  firebase projects:create "$PROJECT_ID" --display-name "$DISPLAY_NAME"
+else
+  echo "==> Project $PROJECT_ID already exists"
+fi
+
+firebase use "$PROJECT_ID"
+
+enable_firestore_api() {
+  if command -v gcloud >/dev/null 2>&1; then
+    echo "==> Enabling Cloud Firestore API..."
+    gcloud services enable firestore.googleapis.com --project "$PROJECT_ID"
+    return 0
+  fi
+  return 1
+}
+
+create_firestore_database() {
+  firebase firestore:databases:create "(default)" \
+    --location "$FIRESTORE_LOCATION" \
+    --project "$PROJECT_ID"
+}
+
+echo "==> Ensuring Firestore database exists..."
+if firebase firestore:databases:list --project "$PROJECT_ID" 2>/dev/null | grep -q "(default)"; then
+  echo "    Firestore (default) already exists"
+else
+  if ! enable_firestore_api; then
+    echo "    gcloud not found — Firestore API must be enabled manually first"
+  fi
+
+  if ! create_firestore_database 2>/tmp/firmshake-firestore.err; then
+    if grep -q "Cloud Firestore API has not been used" /tmp/firmshake-firestore.err; then
+      echo ""
+      echo "ERROR: Cloud Firestore API is not enabled for $PROJECT_ID."
+      echo ""
+      echo "Fix (pick one):"
+      echo "  A) Firebase Console (easiest):"
+      echo "     https://console.firebase.google.com/project/$PROJECT_ID/firestore"
+      echo "     Click 'Create database' → Start in test mode → choose $FIRESTORE_LOCATION"
+      echo ""
+      echo "  B) Google Cloud API page:"
+      echo "     https://console.developers.google.com/apis/api/firestore.googleapis.com/overview?project=$PROJECT_ID"
+      echo "     Click 'Enable', wait ~1 minute, then re-run: npm run firebase:setup"
+      echo ""
+      exit 1
+    fi
+    cat /tmp/firmshake-firestore.err >&2
+    exit 1
+  fi
+fi
+
+echo "==> Deploying Firestore security rules..."
+firebase deploy --only firestore:rules --project "$PROJECT_ID"
+
+APP_ID=""
+firebase apps:list WEB --project "$PROJECT_ID" --json > /tmp/firmshake-apps-list.json 2>/dev/null || echo '{"result":[]}' > /tmp/firmshake-apps-list.json
+APP_ID="$(python3 -c "import json; apps=json.load(open('/tmp/firmshake-apps-list.json')).get('result', []); print(apps[0]['appId'] if apps else '')")"
+
+if [ -n "$APP_ID" ]; then
+  echo "==> Using existing web app: $APP_ID"
+else
+  echo "==> Creating web app..."
+  firebase apps:create WEB "$WEB_APP_NAME" --project "$PROJECT_ID" --json > /tmp/firmshake-app-create.json
+  APP_ID="$(python3 -c "
+import json
+data = json.load(open('/tmp/firmshake-app-create.json'))
+result = data.get('result', data)
+print(result['appId'] if isinstance(result, dict) else result[0]['appId'])
+")"
+fi
+
+echo "==> Fetching web SDK config..."
+firebase apps:sdkconfig WEB "$APP_ID" --project "$PROJECT_ID" --json > /tmp/firmshake-sdk.json
+
+python3 <<PY
+import json
+import os
+from pathlib import Path
+
+project_id = os.environ.get("FIREBASE_PROJECT_ID", "firmshake-dev")
+is_prod = project_id == "firmshake-prod"
+
+raw = json.load(open("/tmp/firmshake-sdk.json"))
+sdk = raw.get("result", raw).get("sdkConfig", raw.get("sdkConfig"))
+if not sdk:
+    raise SystemExit("Could not parse Firebase SDK config JSON")
+
+env_path = Path("$ENV_FILE")
+lines = []
+if env_path.exists():
+    lines = env_path.read_text().splitlines()
+
+values = {
+    "VITE_FIREBASE_API_KEY": sdk["apiKey"],
+    "VITE_FIREBASE_AUTH_DOMAIN": sdk["authDomain"],
+    "VITE_FIREBASE_PROJECT_ID": sdk["projectId"],
+    "VITE_FIREBASE_STORAGE_BUCKET": sdk.get("storageBucket", ""),
+    "VITE_FIREBASE_MESSAGING_SENDER_ID": sdk["messagingSenderId"],
+    "VITE_FIREBASE_APP_ID": sdk["appId"],
+    "VITE_API_BASE_URL": (
+        "https://REPLACE-ME-firmshake-api-XXXX.us-east1.run.app"
+        if is_prod
+        else "http://localhost:5001"
+    ),
+}
+
+existing = {}
+for line in lines:
+    if "=" in line and not line.strip().startswith("#"):
+        key, val = line.split("=", 1)
+        existing[key] = val
+
+merged = {**values, **{k: v for k, v in existing.items() if k not in values}}
+output = [
+    "# Generated by scripts/setup-firebase.sh",
+]
+if is_prod:
+    output.append("VITE_APP_STACK=prod")
+output.extend([
+    f"VITE_FIREBASE_API_KEY={merged['VITE_FIREBASE_API_KEY']}",
+    f"VITE_FIREBASE_AUTH_DOMAIN={merged['VITE_FIREBASE_AUTH_DOMAIN']}",
+    f"VITE_FIREBASE_PROJECT_ID={merged['VITE_FIREBASE_PROJECT_ID']}",
+    f"VITE_FIREBASE_STORAGE_BUCKET={merged['VITE_FIREBASE_STORAGE_BUCKET']}",
+    f"VITE_FIREBASE_MESSAGING_SENDER_ID={merged['VITE_FIREBASE_MESSAGING_SENDER_ID']}",
+    f"VITE_FIREBASE_APP_ID={merged['VITE_FIREBASE_APP_ID']}",
+    "",
+    f"VITE_API_BASE_URL={merged['VITE_API_BASE_URL']}",
+    "",
+])
+if is_prod:
+    output.extend([
+        "VITE_PAYMENTS_ENABLED=false",
+        "VITE_USE_BFF_LISTINGS=true",
+        "VITE_USE_BFF_AGREEMENTS=true",
+        "VITE_USE_BFF_USERS=true",
+        "VITE_USE_BFF_MESSAGES=false",
+        "VITE_USE_BFF_INBOX=false",
+        "VITE_USE_BFF_BROWSE=true",
+        "",
+        "VITE_GOOGLE_MAPS_API_KEY=",
+        "VITE_GOOGLE_WEB_CLIENT_ID=",
+        "VITE_RECAPTCHA_SITE_KEY=",
+        "VITE_RECAPTCHA_USE_ENTERPRISE=true",
+        "",
+    ])
+env_path.write_text("\n".join(output))
+print(f"Wrote {env_path}")
+
+config_path = Path("$ROOT_DIR/public/firebase-messaging-config.json")
+config_path.parent.mkdir(parents=True, exist_ok=True)
+config_path.write_text(json.dumps({
+    "apiKey": sdk["apiKey"],
+    "authDomain": sdk["authDomain"],
+    "projectId": sdk["projectId"],
+    "storageBucket": sdk.get("storageBucket", ""),
+    "messagingSenderId": sdk["messagingSenderId"],
+    "appId": sdk["appId"],
+}, indent=2) + "\n")
+print(f"Wrote {config_path}")
+PY
+
+cat > "$ROOT_DIR/.firebaserc" <<'EOF'
+{
+  "projects": {
+    "default": "firmshake-dev",
+    "devo": "firmshake-dev",
+    "prod": "firmshake-prod"
+  }
+}
+EOF
+
+if [ "$PROJECT_ID" = "firmshake-prod" ]; then
+  firebase use prod
+else
+  firebase use devo
+fi
+
+echo ""
+echo "==> Checking Firebase Authentication..."
+if firebase auth:export /tmp/firmshake-auth-check.json --project "$PROJECT_ID" >/dev/null 2>&1; then
+  rm -f /tmp/firmshake-auth-check.json
+  echo "    Authentication is enabled"
+else
+  echo ""
+  echo "WARNING: Firebase Authentication is NOT enabled yet."
+  echo "You must do this in the Firebase Console before sign-up will work:"
+  echo "  1. Open https://console.firebase.google.com/project/$PROJECT_ID/authentication"
+  echo "  2. Click 'Get started' (first-time setup)"
+  echo "  3. Go to Sign-in method → Email/Password → Enable"
+  echo ""
+fi
+
+echo "==> Done. Start the app with: npm run dev"

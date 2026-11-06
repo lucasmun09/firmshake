@@ -9,15 +9,43 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   plugins: [
     vue(),
-    legacy()
+    legacy(),
+    {
+      name: 'inject-app-build-meta',
+      transformIndexHtml(html) {
+        const buildId = process.env.VITE_APP_BUILD_ID ?? Date.now().toString(36);
+        return html.replace(
+          '<meta http-equiv="Cache-Control" content="no-cache" />',
+          `<meta http-equiv="Cache-Control" content="no-cache" />\n    <meta name="app-build" content="${buildId}" />`,
+        );
+      },
+    },
   ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
   },
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:5001',
+        changeOrigin: true,
+      },
+      '/health': {
+        target: 'http://localhost:5001',
+        changeOrigin: true,
+      },
+    },
+  },
   test: {
     globals: true,
-    environment: 'jsdom'
-  }
+    environment: 'jsdom',
+    // Node 22+/26: jsdom localStorage throws on opaque origins unless a URL is set.
+    environmentOptions: {
+      jsdom: {
+        url: 'http://localhost/',
+      },
+    },
+  },
 })
