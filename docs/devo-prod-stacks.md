@@ -6,6 +6,9 @@ FirmShake runs two fully separate stacks. Existing beta data stays on **devo**; 
 
 | Doc | Use when |
 |---|---|
+| [`remaining-human-checklist.md`](./remaining-human-checklist.md) | **Code-complete leftovers** — workflow scope, MFA Cypress secrets, prod cutover |
+| [`marketplace-remaining-gaps.md`](./marketplace-remaining-gaps.md) | No-payments product surface checklist (Done) |
+| [`marketplace-integration-gaps.md`](./marketplace-integration-gaps.md) | Residual test risk without MFA secrets |
 | [`prod-cutover-runbook.md`](./prod-cutover-runbook.md) | Auth/OAuth/reCAPTCHA → API → web → DNS cutover |
 | [`typesense-dual-stack.md`](./typesense-dual-stack.md) | Separate Typesense clusters / backfill |
 | [`ci-promote-pipeline.md`](./ci-promote-pipeline.md) | GitHub Environments, soft gate, WIF TODO |

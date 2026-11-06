@@ -1,8 +1,10 @@
 # Remaining gaps — full marketplace (no payments)
 
-Honest checklist vs a shippable marketplace **without** a payment processor. Updated 2026-11-05 (Firestore inbox thread cap parity).
+Honest checklist vs a shippable marketplace **without** a payment processor. Updated 2026-11-05 (PR hygiene / code-complete).
 
-Agent-store copy: Project store `docs/remaining-gaps.md`.
+**Verdict:** product surfaces **Done**. Remaining work is **human-only** — see [`remaining-human-checklist.md`](./remaining-human-checklist.md).
+
+Agent-store copy: Project store `docs/remaining-gaps.md` (+ `docs/remaining-human-checklist.md`).
 
 Payments / Stripe / escrow = **out of scope** (Phase 6+). Mock meetup deposits stay.
 
@@ -47,7 +49,7 @@ Payments / Stripe / escrow = **out of scope** (Phase 6+). Mock meetup deposits s
 |---|---|---|
 | Unit (browse, auth, dual-stack, saved+tombstones, threads, share, seller, report, message images, description search, browse block-list, thread enrich cache) | **Done** | Targeted suites green |
 | Cypress smoke (auth, browse, listing, stack.devo) | **Done** (soft) | Soft smoke: share, seller, mark-sold, report cancel, map, blocked, attach photo |
-| Broader integration tests | **Done** (Vitest) | `tests/unit/integration/marketplace*.spec.ts` (incl. inbox cap/BFF accumulate/enrich/block) + soft-smoke inbox + API `test_marketplace_flow_no_payments.py` cursor pages — see `docs/marketplace-integration-gaps.md` |
+| Broader integration tests | **Done** (Vitest) | `tests/unit/integration/marketplace*.spec.ts` (inbox cap/enrich/block + no-payments surfaces chain) + soft-smoke inbox + API `test_marketplace_flow_no_payments.py` (cursor + sold/public/photo/`q`) — see `docs/marketplace-integration-gaps.md` |
 
 ## Priority queue
 
@@ -63,5 +65,6 @@ Payments / Stripe / escrow = **out of scope** (Phase 6+). Mock meetup deposits s
 10. ~~Thread enrich cache~~ **Done** (`threadEnrichCache` TTL 60s; enrichThreads cache-first)
 11. ~~Browse block-list Vitest~~ **Done** (Bearer forward + client filter + cache bust on block)
 12. ~~Firestore inbox thread cap beyond first page~~ **Done** (`FIRESTORE_INBOX_THREAD_CAP` = 10×30; matches BFF accumulate)
-13. Deepen MFA `marketplace.flow` when secrets present in CI
-14. Cursor load-more UI if inboxes routinely exceed 300 (rare)
+13. **Human:** deepen MFA `marketplace.flow` when secrets present in CI — [`remaining-human-checklist.md`](./remaining-human-checklist.md)
+14. **Human:** live `.github/workflows/*` + prod secrets / WIF cutover — same checklist
+15. Optional later: cursor load-more UI if inboxes routinely exceed 300 (rare)

@@ -7,11 +7,11 @@ Honest leftover risk after adding modular Vitest + Cypress coverage for
 
 | Layer | Files | Strength |
 |---|---|---|
-| Vitest cross-feature contracts | `tests/unit/integration/marketplace*.spec.ts` | Can fail on pure contracts (summary strip, save cap/merge, thread/inbox ids, sell create/remove routing, full chain) |
+| Vitest cross-feature contracts | `tests/unit/integration/marketplace*.spec.ts` | Can fail on pure contracts (summary strip, save/tombstones, thread/inbox ids + cap/enrich, block-list, sell create/remove/sold, share/report/description/photo chain, full flow) |
 | Cypress guest walls | `tests/e2e/specs/marketplace.guest.cy.ts` | Real browse→detail + auth redirects; needs live deovo/local with listings |
 | Cypress authenticated chain | `tests/e2e/specs/marketplace.flow.cy.ts` | Real UI when `CYPRESS_TEST_EMAIL_MFA` / password set; skipped otherwise |
 | Cypress soft smoke | `tests/e2e/specs/marketplace.soft-smoke.cy.ts` | Guest map + mark-sold hide + blocked redirect; MFA mark-sold confirm/cancel (no mutate), blocked page, block CTA, map |
-| API Flask chain | `firmshake-api/tests/test_marketplace_flow_no_payments.py` | browse/summary → create → message → inbox read; asserts payment routes absent |
+| API Flask chain | `firmshake-api/tests/test_marketplace_flow_no_payments.py` | browse/summary → create → message → inbox read/cursor → photo message → public seller → sold → description `q` search; asserts payment routes absent |
 
 ## Related product gaps closed
 
@@ -22,7 +22,7 @@ Honest leftover risk after adding modular Vitest + Cypress coverage for
 ## Remaining gaps (do not rubber-stamp)
 
 1. **Live Firestore subscribe / rebuild** — `subscribeInboxThreads`, `rebuildThreadsForUser`, and remote saved hydrate against a real project are still manual / MFA e2e. Unit tests mock remotes.
-2. **Authenticated e2e CI** — marketplace.flow + existing smoke specs skip without MFA test secrets in the agent/CI environment. Guest e2e still needs `CYPRESS_BASE_URL` (deovo or local) and a non-empty browse feed.
+2. **Authenticated e2e CI** — marketplace.flow + existing smoke specs skip without MFA test secrets in the agent/CI environment. Guest e2e still needs `CYPRESS_BASE_URL` (deovo or local) and a non-empty browse feed. Human steps: [`remaining-human-checklist.md`](./remaining-human-checklist.md).
 3. **Saved is guest-accessible by design** — `/tabs/savedlistings` uses `guestAccessible: true` (local bookmarks only). Guests are **not** redirected to login; cross-device sync still requires auth. Do not “fix” this into an auth wall without a product decision.
 4. ~~**Saved sync race**~~ **Done** — local + remote soft-delete tombstones; LWW merge (`deletedAt` vs `savedAt`); see `docs/saved-listings-sync.md`.
 5. **Own-listing messaging** — composer is hidden for the seller’s own listing; e2e “send message” soft-skips when the first browse card is owned by the test user.
