@@ -24,7 +24,8 @@ Last updated: **2026-08-06**
 - [x] `GET /api/v1/listings` browse endpoint (API only; client still uses Firestore)
 - [x] Firestore rules: commented deny blocks + rollout comments (not enforced — prod flags off)
 - [x] Wire `inboxServiceRouter` into Inbox/Buying/Selling pages + overflow menu + message view
-- [ ] Enable `VITE_USE_BFF_INBOX` in staging after manual QA (flag stays **false** by default)
+- [x] Enable `VITE_USE_BFF_INBOX` on **deovo** (`.env.devo` + CI deovo job); client accumulates cursor pages (max 10×30)
+- [ ] Prod `VITE_USE_BFF_INBOX` stays **false** until authenticated inbox smoke on deovo + cutover
 - [ ] Uncomment Firestore write-deny rules after all domain flags are on in production
 
 ### Rollout instructions
@@ -41,7 +42,7 @@ Enable BFF domains incrementally via env / CI secrets. Recommended order:
 | `VITE_USE_BFF_MESSAGES` | false | `messageServiceRouter` | `POST /api/v1/listings/{id}/messages` |
 | `VITE_USE_BFF_AGREEMENTS` | false (dev: on if API configured) | `agreementServiceRouter` | `/api/v1/agreements/*` |
 | `VITE_USE_BFF_USERS` | false (dev: on if API configured) | `userServiceRouter`, `blockServiceRouter`, `communityServiceRouter` | `/api/v1/users/*`, `/api/v1/communities/*` |
-| `VITE_USE_BFF_INBOX` | false | `inboxServiceRouter` | `/api/v1/inbox/*` |
+| `VITE_USE_BFF_INBOX` | false (devo: true) | `inboxServiceRouter` | `/api/v1/inbox/*` |
 
 **Intentionally deferred:** Stripe live payments, Firestore deny-rule enforcement, distributed rate limits (see Security Checklist).
 

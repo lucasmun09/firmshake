@@ -279,9 +279,8 @@ async function loadInbox() {
     unsubscribeThreads?.();
     unsubscribeInboxStates?.();
 
-    unsubscribeThreads = subscribeInboxThreadsRouted(
-      user.uid,
-      (nextThreads) => {
+    unsubscribeThreads = subscribeInboxThreadsRouted(user.uid, {
+      onData: (nextThreads) => {
         if (!isCurrentGeneration(generation)) {
           return;
         }
@@ -295,7 +294,7 @@ async function loadInbox() {
           inboxRowCount: inboxRows.value.length,
         });
       },
-      (loadError) => {
+      onError: (loadError) => {
         const message = loadError.message.includes('session')
           ? SESSION_EXPIRED_MESSAGE
           : 'Could not load your messages.';
@@ -305,7 +304,16 @@ async function loadInbox() {
           finishLoad(generation, 'partial-after-error');
         }
       },
-    );
+      onInboxStates: (states) => {
+        if (!isCurrentGeneration(generation) || states.size === 0) {
+          return;
+        }
+        // Seed from BFF-enriched pages; Firestore subscribeInboxStates still wins on later snaps.
+        if (inboxStates.value.size === 0) {
+          inboxStates.value = states;
+        }
+      },
+    });
 
     unsubscribeInboxStates = subscribeInboxStates(user.uid, (states) => {
       inboxStates.value = states;

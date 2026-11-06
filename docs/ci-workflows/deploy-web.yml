@@ -64,7 +64,8 @@ jobs:
           VITE_USE_BFF_AGREEMENTS: "true"
           VITE_USE_BFF_USERS: "true"
           VITE_USE_BFF_MESSAGES: "false"
-          VITE_USE_BFF_INBOX: "false"
+          # Devo staging QA: inbox BFF poll + cursor pages. Prod job keeps false below.
+          VITE_USE_BFF_INBOX: "true"
           VITE_USE_BFF_BROWSE: "true"
 
       - name: Generate Firebase messaging config

@@ -1,6 +1,10 @@
 import type { AppNotification, Listing, Message, MessageThread } from '@/types';
 import { normalizeImageUrl } from '@/utils/apiBaseUrl';
 import { getListingsByIds } from '@/features/listings/services/listings';
+import {
+  getThreadEnrichListings,
+  setThreadEnrichListings,
+} from '@/features/messages/services/threadEnrichCache';
 
 export const THREADS_PAGE_SIZE = 30;
 
@@ -50,10 +54,19 @@ export async function enrichThreads(threads: MessageThread[]): Promise<MessageTh
   }
 
   const listingIds = [...new Set(threads.map((thread) => thread.listingId))];
-  const listingsById = await getListingsByIds(listingIds, { preferCache: true });
+  const cached = getThreadEnrichListings(listingIds);
+  const missingIds = listingIds.filter((id) => !cached.has(id));
+  const fetched =
+    missingIds.length > 0
+      ? await getListingsByIds(missingIds, { preferCache: true })
+      : new Map<string, Listing>();
+
+  if (fetched.size > 0) {
+    setThreadEnrichListings([...fetched.values()]);
+  }
 
   return threads.map((thread) => {
-    const listing = listingsById.get(thread.listingId);
+    const listing = cached.get(thread.listingId) ?? fetched.get(thread.listingId);
     if (!listing) {
       return {
         ...thread,

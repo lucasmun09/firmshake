@@ -15,10 +15,35 @@ import {
   mergeFreshBrowseResultsOnTop,
   persistBrowseLocalPool,
   removeListingFromAllBrowseLocalCaches,
+  removeSellerListingsFromAllBrowseLocalCaches,
   resolveBrowseLocalCacheKey,
 } from '@/features/listings/services/browseLocalStorageCache';
 import { viewportFromCenterRadius } from '@/features/listings/utils/browseMapView';
 import type { Listing } from '@/types';
+
+/** Node 22+ may expose a non-functional `localStorage` global without --localstorage-file. */
+function installMemoryLocalStorage(): void {
+  const store = new Map<string, string>();
+  const memory: Storage = {
+    get length() {
+      return store.size;
+    },
+    clear: () => store.clear(),
+    getItem: (key: string) => (store.has(key) ? store.get(key)! : null),
+    key: (index: number) => [...store.keys()][index] ?? null,
+    removeItem: (key: string) => {
+      store.delete(key);
+    },
+    setItem: (key: string, value: string) => {
+      store.set(key, String(value));
+    },
+  };
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    writable: true,
+    value: memory,
+  });
+}
 
 function makeListing(id: string): Listing {
   return {
@@ -41,7 +66,7 @@ function makeListing(id: string): Listing {
 
 describe('browseLocalStorageCache', () => {
   beforeEach(() => {
-    localStorage.clear();
+    installMemoryLocalStorage();
   });
 
   afterEach(() => {
@@ -194,6 +219,25 @@ describe('browseLocalStorageCache', () => {
     expect(getStaleBrowseLocalCache(searchKey)?.orderedIds).toEqual(['keep']);
     expect(getStaleBrowseLocalCache(mapKey)?.orderedIds).toEqual(['keep']);
     expect(getStaleBrowseLocalCache(allKey)?.listingsById.remove).toBeUndefined();
+  });
+
+  it('removes all listings for a blocked seller from browse-local buckets', () => {
+    const uid = 'user-1';
+    const allKey = buildBrowseLocalAllKey(uid, { communityId: 'all' });
+    const keep = makeListing('keep');
+    keep.sellerId = 'seller-ok';
+    const blockedA = makeListing('blocked-a');
+    blockedA.sellerId = 'seller-blocked';
+    const blockedB = makeListing('blocked-b');
+    blockedB.sellerId = 'seller-blocked';
+
+    persistBrowseLocalPool(allKey, [keep, blockedA, blockedB], { hasMore: false });
+
+    const updated = removeSellerListingsFromAllBrowseLocalCaches('seller-blocked');
+
+    expect(updated).toBe(1);
+    expect(getStaleBrowseLocalCache(allKey)?.orderedIds).toEqual(['keep']);
+    expect(getStaleBrowseLocalCache(allKey)?.listingsById['blocked-a']).toBeUndefined();
   });
 
   it('evicts oldest cache keys when max key count is exceeded', () => {

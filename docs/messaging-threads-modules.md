@@ -31,16 +31,16 @@ Nothing console-side for this doc. Use the module map when editing inbox/thread 
 
 | Gap | Notes |
 |---|---|
-| Thread pagination beyond `THREADS_PAGE_SIZE` (30) | Client currently slices snapshot; BFF inbox already paginates when `VITE_USE_BFF_INBOX=true`. |
-| Dedicated `threadEnrich` cache | Enrich still hits `getListingsByIds` per emit; optional summary cache would cut detail reads. |
+| Thread pagination beyond `THREADS_PAGE_SIZE` (30) on Firestore path | Firestore subscribe still slices to 30; **BFF path** accumulates cursor pages (`accumulateInboxThreadPages`, max 10×30) when `VITE_USE_BFF_INBOX=true`. |
+| ~~Dedicated `threadEnrich` cache~~ | **Done** — `threadEnrichCache.ts` (60s TTL, max 200); `enrichThreads` reads cache before `getListingsByIds`. |
 | Selling buyer-thread count UI | `countBuyerThreadsForListing` is exported but unused — wire on Selling rows if product wants conversation counts. |
-| Inbox BFF default-on | Flag stays **false** until staging QA (`docs/BFF_PLAN.md`). |
-| Integration test for subscribe merge | Unit coverage covers pure merge/map; live subscribe still manual / e2e. |
+| Inbox BFF prod default-on | **Devo on** (`.env.devo` / CI). Prod stays **false** until authenticated deovo smoke. |
+| Integration test for subscribe merge | Unit coverage covers pure merge/map + BFF page accumulate; live subscribe still manual / e2e. |
 
 ## How to verify
 
 ```bash
-npm run test:unit -- --run tests/unit/threadModel.spec.ts tests/unit/threadRebuild.spec.ts tests/unit/inboxState.spec.ts
+npm run test:unit -- --run tests/unit/threadModel.spec.ts tests/unit/threadRebuild.spec.ts tests/unit/inboxState.spec.ts tests/unit/inboxBffPages.spec.ts tests/unit/inboxServiceRouter.spec.ts
 ```
 
 Open Inbox after sending a message as buyer and seller; confirm archive toggle and "New" badge still follow `inboxState` rules. Inspect `/logs` for `threads` category (`subscribeInboxThreads`, enrich failures).

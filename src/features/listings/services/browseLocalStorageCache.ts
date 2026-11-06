@@ -207,6 +207,21 @@ function isBrowseLocalListingCacheKey(key: string): boolean {
 
 /** Removes a listing from every browse-local cache bucket (all, search, map). */
 export function removeListingFromAllBrowseLocalCaches(listingId: string): number {
+  return removeBrowseLocalListingsWhere((summary) => summary.id === listingId);
+}
+
+/** Removes every cached listing for a seller (used after block). */
+export function removeSellerListingsFromAllBrowseLocalCaches(sellerId: string): number {
+  const target = String(sellerId ?? '').trim();
+  if (!target) {
+    return 0;
+  }
+  return removeBrowseLocalListingsWhere((summary) => summary.sellerId === target);
+}
+
+function removeBrowseLocalListingsWhere(
+  shouldRemove: (summary: StoredListingSummary) => boolean,
+): number {
   if (!isStorageAvailable()) {
     return 0;
   }
@@ -225,13 +240,23 @@ export function removeListingFromAllBrowseLocalCaches(listingId: string): number
     }
 
     const entry = readEntry(key);
-    if (!entry?.data.listingsById[listingId]) {
+    if (!entry) {
       continue;
     }
 
-    const nextOrderedIds = entry.data.orderedIds.filter((id) => id !== listingId);
+    const removeIds = Object.values(entry.data.listingsById)
+      .filter((summary) => shouldRemove(summary))
+      .map((summary) => summary.id);
+    if (removeIds.length === 0) {
+      continue;
+    }
+
+    const removeSet = new Set(removeIds);
+    const nextOrderedIds = entry.data.orderedIds.filter((id) => !removeSet.has(id));
     const nextListingsById = { ...entry.data.listingsById };
-    delete nextListingsById[listingId];
+    for (const id of removeIds) {
+      delete nextListingsById[id];
+    }
 
     if (nextOrderedIds.length === 0) {
       removeEntry(key);

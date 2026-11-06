@@ -87,8 +87,9 @@ export function useBffUsers(): boolean {
 /**
  * Inbox thread fetch and inboxState mutations via firmshake-api (`/api/v1/inbox`).
  *
- * Default: **false** — Firestore listeners and direct inboxState writes remain canonical
- * until Phase 5 read migration is explicitly opted in.
+ * Default when unset: **false** (Firestore listeners remain canonical).
+ * Devo staging QA opts in via `.env.devo` / CI (`VITE_USE_BFF_INBOX=true`).
+ * Prod stays explicit **false** until cutover.
  */
 export function useBffInbox(): boolean {
   const explicit = parseEnvFlag(import.meta.env.VITE_USE_BFF_INBOX);

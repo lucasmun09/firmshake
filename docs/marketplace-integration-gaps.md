@@ -26,10 +26,10 @@ Honest leftover risk after adding modular Vitest + Cypress coverage for
 3. **Saved is guest-accessible by design** — `/tabs/savedlistings` uses `guestAccessible: true` (local bookmarks only). Guests are **not** redirected to login; cross-device sync still requires auth. Do not “fix” this into an auth wall without a product decision.
 4. ~~**Saved sync race**~~ **Done** — local + remote soft-delete tombstones; LWW merge (`deletedAt` vs `savedAt`); see `docs/saved-listings-sync.md`.
 5. **Own-listing messaging** — composer is hidden for the seller’s own listing; e2e “send message” soft-skips when the first browse card is owned by the test user.
-6. **Inbox BFF default-off** — `VITE_USE_BFF_INBOX` stays false until staging QA; router tests cover both flags, live path is still Firestore.
-7. **Thread pagination / enrich cache** — still documented in `docs/messaging-threads-modules.md`; not exercised by this chain.
+6. ~~**Inbox BFF default-off**~~ **Devo on** — `VITE_USE_BFF_INBOX=true` via `.env.devo` + CI deovo job; cursor page accumulate + Vitest; prod stays false. Authenticated inbox smoke still manual / MFA e2e.
+7. **Thread pagination (Firestore)** — Firestore path still slices to 30; BFF path paginates. ~~Enrich cache~~ **Done** (`threadEnrichCache`).
 8. **Sell photo upload + Typesense index lag** — create listing e2e stubs `/api/images`; browse visibility after create is eventually consistent and not asserted in the Vitest chain.
-9. **Block-list filtering on browse** — optional Bearer filtering is not part of these marketplace specs.
+9. ~~**Block-list filtering on browse**~~ **Done** — Bearer forwarded on browse/summary+search; client `browseBlockFilter` for cache paint; `bustBrowseCachesForBlockedSeller` after block.
 10. **Payments / deposits** — intentionally out of scope; API test only asserts payment-ish routes stay 404/405/501/503.
 11. **Multi-device bookmark proof** — no automated two-session Cypress; tombstone unit/integration coverage is automated; device A/B manual still useful after hosting deploy.
 12. **Deovo deploy lag** — guest e2e hits currently hosted deovo; brand-new client routes need `npm run deploy:hosting` before hosted Cypress can see them.

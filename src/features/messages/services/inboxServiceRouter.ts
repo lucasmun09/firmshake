@@ -4,9 +4,16 @@
 import type { Unsubscribe } from 'firebase/firestore';
 
 import { useBffInbox } from '@/common/config/featureFlags';
-import type { MessageThread } from '@/types';
+import { debugLog, serializeError } from '@/common/debug/debugLog';
+import type { InboxState, MessageThread } from '@/types';
 
 import * as inboxBff from './inboxBff';
+import {
+  accumulateInboxThreadPages,
+  BFF_INBOX_PAGE_SIZE,
+  inboxStatesFromBffThreads,
+  stripInboxStateFromThreads,
+} from './inboxBffPages';
 import * as inboxFirestoreWrites from './inboxFirestoreWrites';
 import { subscribeInboxThreads } from './threads';
 
@@ -62,14 +69,26 @@ export async function routeFetchInboxThreads(options?: {
   return null;
 }
 
+export type InboxThreadsSubscribeHandlers = {
+  onData: (threads: MessageThread[]) => void;
+  onError?: (error: Error) => void;
+  /** Optional: seed archive/unread map from BFF-enriched inboxState. */
+  onInboxStates?: (states: Map<string, InboxState>) => void;
+};
+
 /** Subscribe to inbox threads — Firestore listeners by default, BFF polling when flag is on. */
 export function subscribeInboxThreadsRouted(
   userId: string,
-  onData: (threads: MessageThread[]) => void,
+  onDataOrHandlers: ((threads: MessageThread[]) => void) | InboxThreadsSubscribeHandlers,
   onError?: (error: Error) => void,
 ): Unsubscribe {
+  const handlers: InboxThreadsSubscribeHandlers =
+    typeof onDataOrHandlers === 'function'
+      ? { onData: onDataOrHandlers, onError }
+      : onDataOrHandlers;
+
   if (!useBffInbox()) {
-    return subscribeInboxThreads(userId, onData, onError);
+    return subscribeInboxThreads(userId, handlers.onData, handlers.onError);
   }
 
   let cancelled = false;
@@ -77,16 +96,29 @@ export function subscribeInboxThreadsRouted(
 
   const refresh = async () => {
     try {
-      const page = await inboxBff.fetchInboxThreads({ limit: 30 });
+      const accumulated = await accumulateInboxThreadPages(inboxBff.fetchInboxThreads, {
+        pageSize: BFF_INBOX_PAGE_SIZE,
+      });
       if (cancelled) {
         return;
       }
-      onData(
-        page.threads.map(({ inboxState: _inboxState, ...thread }) => thread),
-      );
+      debugLog.debug('inbox', 'bff.poll.done', {
+        userId,
+        count: accumulated.threads.length,
+        pagesFetched: accumulated.pagesFetched,
+        truncated: accumulated.truncated,
+      });
+      handlers.onData(stripInboxStateFromThreads(accumulated.threads));
+      if (handlers.onInboxStates) {
+        handlers.onInboxStates(inboxStatesFromBffThreads(accumulated.threads));
+      }
     } catch (error) {
+      debugLog.warn('inbox', 'bff.poll.failed', {
+        userId,
+        error: serializeError(error),
+      });
       if (!cancelled) {
-        onError?.(error instanceof Error ? error : new Error(String(error)));
+        handlers.onError?.(error instanceof Error ? error : new Error(String(error)));
       }
     }
   };

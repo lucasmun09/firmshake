@@ -381,17 +381,24 @@ async function loadSelling() {
       },
     );
 
-    unsubscribeThreads = subscribeInboxThreadsRouted(
-      user.uid,
-      (nextThreads) => {
+    unsubscribeThreads = subscribeInboxThreadsRouted(user.uid, {
+      onData: (nextThreads) => {
         threads.value = nextThreads.filter((thread) => thread.sellerId === user.uid);
       },
-      (loadError) => {
+      onError: (loadError) => {
         debugLog.warn('selling', 'Threads subscription failed', {
           error: serializeError(loadError),
         });
       },
-    );
+      onInboxStates: (states) => {
+        if (states.size === 0) {
+          return;
+        }
+        if (inboxStates.value.size === 0) {
+          inboxStates.value = states;
+        }
+      },
+    });
 
     unsubscribeAgreements = subscribeSellerAgreements(
       user.uid,

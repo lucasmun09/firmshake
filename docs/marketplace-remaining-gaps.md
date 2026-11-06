@@ -1,6 +1,6 @@
 # Remaining gaps — full marketplace (no payments)
 
-Honest checklist vs a shippable marketplace **without** a payment processor. Updated 2026-11-05 (saved sync tombstones).
+Honest checklist vs a shippable marketplace **without** a payment processor. Updated 2026-11-05 (browse block-list Vitest + thread enrich cache).
 
 Agent-store copy: Project store `docs/remaining-gaps.md`.
 
@@ -19,7 +19,7 @@ Payments / Stripe / escrow = **out of scope** (Phase 6+). Mock meetup deposits s
 | **Mark listing sold** | **Done** | Seller-only UI + Firestore/BFF `POST …/sold`; browse treats sold as unavailable |
 | Delist / moderator remove | **Done** | Sets `removed` |
 | Saved listings (local + Firestore sync) | **Done** | Soft tombstones + LWW hydrate; rules deploy verify on deovo |
-| Messaging / inbox / archive / block | **Done** | Thread modules split |
+| Messaging / inbox / archive / block | **Done** | Thread modules split; inbox BFF on deovo (prod flag off) |
 | Buying / Selling tabs | **Done** | Selling shows active only |
 | Profile / settings / appearance / blocked | **Done** | |
 | Communities join/create/moderate | **Done** | |
@@ -45,7 +45,7 @@ Payments / Stripe / escrow = **out of scope** (Phase 6+). Mock meetup deposits s
 
 | Area | Status | Notes |
 |---|---|---|
-| Unit (browse, auth, dual-stack, saved+tombstones, threads, share, seller, report, message images, description search) | **Done** | Targeted suites green |
+| Unit (browse, auth, dual-stack, saved+tombstones, threads, share, seller, report, message images, description search, browse block-list, thread enrich cache) | **Done** | Targeted suites green |
 | Cypress smoke (auth, browse, listing, stack.devo) | **Done** (soft) | Soft smoke: share, seller, mark-sold, report cancel, map, blocked, attach photo |
 | Broader integration tests | **Done** (Vitest) | `tests/unit/integration/marketplace*.spec.ts` + API `test_marketplace_flow_no_payments.py` — see `docs/marketplace-integration-gaps.md` |
 
@@ -59,5 +59,8 @@ Payments / Stripe / escrow = **out of scope** (Phase 6+). Mock meetup deposits s
 6. ~~Message image attachments~~ **Done**
 7. ~~Description full-text search~~ **Done**
 8. ~~Saved sync tombstones~~ **Done**
-9. Deepen MFA `marketplace.flow` when secrets present in CI
-10. Inbox BFF staging QA / default-on; thread enrich cache; browse block-list Vitest; thread pagination beyond page size
+9. ~~Inbox BFF deovo enable + cursor accumulate~~ **Done** (prod stays false; authenticated smoke still manual)
+10. ~~Thread enrich cache~~ **Done** (`threadEnrichCache` TTL 60s; enrichThreads cache-first)
+11. ~~Browse block-list Vitest~~ **Done** (Bearer forward + client filter + cache bust on block)
+12. Deepen MFA `marketplace.flow` when secrets present in CI
+13. Firestore thread pagination beyond page size (BFF path already accumulates)

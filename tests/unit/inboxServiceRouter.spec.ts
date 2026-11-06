@@ -31,13 +31,31 @@ vi.mock('@/features/messages/services/threads', () => ({
   subscribeInboxThreads: (...args: unknown[]) => subscribeInboxThreads(...args),
 }));
 
+vi.mock('@/common/debug/debugLog', () => ({
+  debugLog: { debug: vi.fn(), warn: vi.fn(), info: vi.fn(), error: vi.fn() },
+  serializeError: (error: unknown) => ({ message: String(error) }),
+}));
+
 describe('inboxServiceRouter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     useBffInbox.mockReturnValue(false);
     fetchThreadsBff.mockResolvedValue({
-      threads: [{ id: 't1', listingId: 'l1', inboxState: { listingId: 'l1' } }],
+      threads: [
+        {
+          id: 't1',
+          listingId: 'l1',
+          listingTitle: 'Bike',
+          listingImageUrl: '',
+          sellerId: 's1',
+          sellerName: 'Sam',
+          lastMessageText: 'hi',
+          lastMessageSenderId: 'b1',
+          lastMessageSenderName: 'Bob',
+          inboxState: { listingId: 'l1', hasViewed: false, isArchived: false },
+        },
+      ],
       hasMore: false,
     });
   });
@@ -96,19 +114,87 @@ describe('inboxServiceRouter', () => {
   it('subscribeInboxThreadsRouted polls BFF when flag is on', async () => {
     useBffInbox.mockReturnValue(true);
     const onData = vi.fn();
+    const onInboxStates = vi.fn();
+    const { subscribeInboxThreadsRouted } = await import(
+      '@/features/messages/services/inboxServiceRouter'
+    );
+
+    const unsubscribe = subscribeInboxThreadsRouted('user-1', {
+      onData,
+      onInboxStates,
+    });
+
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(fetchThreadsBff).toHaveBeenCalledWith({ limit: 30, cursor: undefined });
+    expect(onData).toHaveBeenCalledWith([
+      expect.objectContaining({ id: 't1', listingId: 'l1' }),
+    ]);
+    expect(onData.mock.calls[0][0][0]).not.toHaveProperty('inboxState');
+    expect(onInboxStates).toHaveBeenCalledWith(
+      expect.any(Map),
+    );
+    expect(onInboxStates.mock.calls[0][0].get('t1')).toEqual(
+      expect.objectContaining({ listingId: 'l1', isArchived: false }),
+    );
+    expect(subscribeInboxThreads).not.toHaveBeenCalled();
+
+    unsubscribe();
+  });
+
+  it('subscribeInboxThreadsRouted walks multiple BFF pages', async () => {
+    useBffInbox.mockReturnValue(true);
+    fetchThreadsBff
+      .mockResolvedValueOnce({
+        threads: [
+          {
+            id: 't1',
+            listingId: 'l1',
+            listingTitle: 'A',
+            listingImageUrl: '',
+            sellerId: 's1',
+            sellerName: 'Sam',
+            lastMessageText: '1',
+            lastMessageSenderId: 'b1',
+            lastMessageSenderName: 'Bob',
+          },
+        ],
+        nextCursor: 't1',
+        hasMore: true,
+      })
+      .mockResolvedValueOnce({
+        threads: [
+          {
+            id: 't2',
+            listingId: 'l2',
+            listingTitle: 'B',
+            listingImageUrl: '',
+            sellerId: 's1',
+            sellerName: 'Sam',
+            lastMessageText: '2',
+            lastMessageSenderId: 'b1',
+            lastMessageSenderName: 'Bob',
+          },
+        ],
+        hasMore: false,
+      });
+
+    const onData = vi.fn();
     const { subscribeInboxThreadsRouted } = await import(
       '@/features/messages/services/inboxServiceRouter'
     );
 
     const unsubscribe = subscribeInboxThreadsRouted('user-1', onData);
-
-    await vi.runOnlyPendingTimersAsync();
-
-    expect(fetchThreadsBff).toHaveBeenCalledWith({ limit: 30 });
-    expect(onData).toHaveBeenCalledWith([{ id: 't1', listingId: 'l1' }]);
-    expect(subscribeInboxThreads).not.toHaveBeenCalled();
-
+    // Flush the initial poll only — do not advance the 30s interval.
+    await Promise.resolve();
+    await Promise.resolve();
+    await vi.waitFor(() => {
+      expect(onData).toHaveBeenCalled();
+    });
     unsubscribe();
+
+    expect(fetchThreadsBff).toHaveBeenCalledTimes(2);
+    expect(onData.mock.calls[0][0].map((t: { id: string }) => t.id)).toEqual(['t1', 't2']);
   });
 
   it('shouldRouteInboxViaBff reflects flag', async () => {

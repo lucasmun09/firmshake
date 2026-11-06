@@ -99,4 +99,34 @@ describe('browseSearchRequest', () => {
       status: 404,
     });
   });
+
+  it('attaches Authorization Bearer so the API can apply block-list filtering', async () => {
+    const { authHeaders } = await import('@/common/services/api');
+    vi.mocked(authHeaders).mockResolvedValue({ Authorization: 'Bearer tok-123' });
+
+    const { loggedFetch } = await import('@/common/debug/loggedFetch');
+    vi.mocked(loggedFetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        listings: [],
+        total: 0,
+        page: 1,
+        pageSize: 24,
+        hasMore: false,
+      }),
+    } as Response);
+
+    const { fetchBrowseSearchEndpoint } = await import(
+      '@/features/listings/services/browseSearchRequest'
+    );
+    await fetchBrowseSearchEndpoint('search', { communityId: 'all' }, 1, 24);
+
+    expect(loggedFetch).toHaveBeenCalledWith(
+      'https://api.test/api/v1/browse/search',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer tok-123' }),
+      }),
+      expect.any(Object),
+    );
+  });
 });

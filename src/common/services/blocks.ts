@@ -12,6 +12,7 @@ import {
   routeBlockUser,
   routeUnblockUser,
 } from '@/common/services/blockServiceRouter';
+import { bustBrowseCachesForBlockedSeller } from '@/features/listings/services/browseCacheOnBlock';
 
 export interface BlockedUserEntry {
   blockedUserId: string;
@@ -48,6 +49,7 @@ export async function blockUser(blockerId: string, blockedUserId: string): Promi
 
   await ensureFirestoreAuth();
   await routeBlockUser(blockerId, blockedUserId);
+  bustBrowseCachesForBlockedSeller(blockedUserId);
 }
 
 export async function unblockUser(blockerId: string, blockedUserId: string): Promise<void> {
