@@ -66,7 +66,7 @@ describe.skipIf(!siblingPresent)('dual-stack cross-repo lockstep (web ↔ API)',
 
   it('keeps API CI soft-gated and payments-off on prod env YAML', () => {
     const apiWorkflow = readFileSync(
-      join(webRoot, '..', 'firmshake-api', '.github/workflows/deploy-api.yml'),
+      join(webRoot, '..', 'firmshake-api', 'docs/ci-workflows/deploy-api.yml'),
       'utf8',
     );
     const prodYaml = readFileSync(

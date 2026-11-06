@@ -4,18 +4,25 @@ Soft-gated promote for web + API. Prod auto-deploy runs only when repository var
 
 Parent: [`devo-prod-stacks.md`](./devo-prod-stacks.md).
 
-## Workflow YAML patch (apply with `workflow` scope)
 
-The GitHub OAuth token used by agents often lacks the `workflow` scope, so this PR ships the intended CI edits as a patch instead of modifying `.github/workflows/deploy-web.yml` directly.
+## Install CI workflows (requires `workflow` scope)
+
+Agent HTTPS tokens cannot create `.github/workflows/*`. Canonical YAML lives in-repo:
 
 ```bash
-git apply docs/ci-deploy-web.workflow.patch
-# or: patch -p1 < docs/ci-deploy-web.workflow.patch
+mkdir -p .github/workflows
+cp docs/ci-workflows/deploy-web.yml .github/workflows/deploy-web.yml
+# optional incremental patch (already applied in the docs/ci-workflows copy):
+# git apply docs/ci-deploy-web.workflow.patch
+git add .github/workflows/deploy-web.yml
+git commit -m "Install deploy-web workflow"
+git push   # credential must include workflow scope
 ```
 
-Then push with a credential that has the `workflow` scope (or edit the workflow in the GitHub UI). Sibling API: `firmshake-api/docs/ci-deploy-api.workflow.patch`.
+Leave repository variable `PROD_DEPLOY_ENABLED` **unset** until a manual prod deploy is proven.
 
- Cutover: [`prod-cutover-runbook.md`](./prod-cutover-runbook.md).
+Sibling API: `firmshake-api/docs/ci-workflows/deploy-api.yml`.
+
 
 ## Flow
 
