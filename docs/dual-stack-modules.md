@@ -35,6 +35,8 @@ Browse local-first summary (non-payments): `docs/browse-summary-api.md` — clie
 
 Messaging / inbox thread split (non-payments): `docs/messaging-threads-modules.md` — `threadModel.ts`, `threadSync.ts`, `threadRebuild.ts`, `threadSubscribe.ts`, barrel `threads.ts`.
 
+Saved listings / bookmarks sync (non-payments): `docs/saved-listings-sync.md` — `savedListings.ts` (local), `savedListingsRemote.ts`, `savedListingsMerge.ts`, `savedListingsSync.ts`.
+
 ## Health / ready contract (lockstep with API)
 
 `GET {API}/health` and `GET {API}/ready` return:

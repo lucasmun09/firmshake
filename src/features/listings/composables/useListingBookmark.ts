@@ -9,6 +9,7 @@ import {
   toggleSavedListing,
   type SavedListingEntry,
 } from '@/features/listings/services/savedListings';
+import { syncSavedListingToggleRemote } from '@/features/listings/services/savedListingsSync';
 import type { Listing, ListingSummary } from '@/types';
 
 const savedRevision = ref(0);
@@ -48,6 +49,9 @@ export function useListingBookmark(listingId: () => string) {
       await toast.present();
       return { saved: false, atCapacity: true };
     }
+
+    const syncedEntry = result.entries.find((entry) => entry.id === listing.id) ?? null;
+    void syncSavedListingToggleRemote(uid.value, listing.id, result.saved, syncedEntry);
 
     const toast = await toastController.create({
       message: result.saved ? 'Listing saved' : 'Removed from saved',

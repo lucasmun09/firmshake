@@ -158,6 +158,12 @@ service cloud.firestore {
           );
         allow write: if isSignedIn() && request.auth.uid == userId;
       }
+
+      // Saved listings / bookmarks — owner-only; localStorage remains the instant cache.
+      // See docs/saved-listings-sync.md.
+      match /savedListings/{listingId} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
     }
 
     match /listings/{listingId} {

@@ -7,6 +7,7 @@ import {
   isListingSaved,
   saveListing,
   SAVED_LISTINGS_MAX,
+  setSavedListings,
   toggleSavedListing,
   unsaveListing,
 } from '@/features/listings/services/savedListings';
@@ -88,4 +89,20 @@ describe('savedListings', () => {
     clearSavedListings('user-a');
     expect(getSavedListings('user-a')).toEqual([]);
   });
+
+  it('replaces the full saved list via setSavedListings', () => {
+    saveListing('user-a', listing('a'));
+    setSavedListings('user-a', [
+      {
+        id: 'b',
+        title: 'Listing b',
+        price: 12,
+        imageUrl: 'https://example.com/b.jpg',
+        savedAt: 99,
+      },
+    ]);
+    expect(getSavedListings('user-a').map((entry) => entry.id)).toEqual(['b']);
+    expect(isListingSaved('user-a', 'a')).toBe(false);
+  });
 });
+

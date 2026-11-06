@@ -85,6 +85,29 @@ export function getSavedListings(uid: string): SavedListingEntry[] {
     .filter((entry): entry is SavedListingEntry => Boolean(entry));
 }
 
+/** Replace the full local saved list (used after remote hydrate/merge). */
+export function setSavedListings(uid: string, entries: SavedListingEntry[]): void {
+  const ordered = entries.slice(0, SAVED_LISTINGS_MAX);
+  const entriesById: Record<string, SavedListingEntry> = {};
+  const orderedIds: string[] = [];
+
+  for (const entry of ordered) {
+    if (!entry?.id || entriesById[entry.id]) {
+      continue;
+    }
+    orderedIds.push(entry.id);
+    entriesById[entry.id] = {
+      id: entry.id,
+      title: String(entry.title ?? ''),
+      price: Number(entry.price) || 0,
+      imageUrl: String(entry.imageUrl ?? ''),
+      savedAt: Number(entry.savedAt) || 0,
+    };
+  }
+
+  writePayload(uid, { version: 1, orderedIds, entriesById });
+}
+
 export function isListingSaved(uid: string, listingId: string): boolean {
   const payload = readPayload(uid);
   return payload.orderedIds.includes(listingId);

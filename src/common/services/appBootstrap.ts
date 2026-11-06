@@ -24,6 +24,8 @@ import {
 import { clearBrowseLocalCacheIfUserChanged } from '@/features/listings/services/browseLocalStorageCache';
 import { clearGeoFilterPrefsIfUserChanged } from '@/features/listings/services/geoFilterStorage';
 import { clearListingPrefsIfUserChanged } from '@/features/listings/services/savedListings';
+import { hydrateSavedListingsFromRemote } from '@/features/listings/services/savedListingsSync';
+import { bumpSavedListingsRevision } from '@/features/listings/composables/useListingBookmark';
 import { scheduleTabPrefetch, stopTabFeedPrefetch } from '@/common/services/tabPrefetch';
 import { subscribeUserProfile } from '@/common/services/users';
 
@@ -149,6 +151,19 @@ async function runBootstrap(uid: string): Promise<void> {
     }
     // Bootstrap still proceeds; individual reads retry once auth propagates.
   }
+
+  void hydrateSavedListingsFromRemote(uid)
+    .then(() => {
+      bumpSavedListingsRevision();
+    })
+    .catch((error) => {
+      if (isSessionExpiredError(error)) {
+        return;
+      }
+      debugLog.warn('bootstrap', 'saved-listings.hydrate.failed', {
+        error: serializeError(error),
+      });
+    });
 
   profileFallbackTimer = window.setTimeout(() => {
     if (!profileReady.value) {
