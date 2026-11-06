@@ -35,7 +35,6 @@ describe('Marketplace flow — guest browse → detail → auth walls', () => {
     cy.visitApp('/tabs/savedlistings');
     cy.url().should('include', '/tabs/savedlistings');
     cy.url().should('not.include', '/login');
-    cy.contains('.toolbar-title', 'Saved', { timeout: 15_000 }).should('be.visible');
     cy.get('ion-content', { timeout: 15_000 }).should(($content) => {
       const text = $content.text();
       expect(
@@ -43,6 +42,7 @@ describe('Marketplace flow — guest browse → detail → auth walls', () => {
           || $content.find('ion-item, a[href*="/listing/"]').length > 0,
       ).to.be.true;
     });
+    cy.contains('ion-tab-button', 'Saved').should('have.class', 'tab-selected');
   });
 
   it('redirects guests from sell create to login', () => {
