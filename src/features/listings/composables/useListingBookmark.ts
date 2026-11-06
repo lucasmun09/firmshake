@@ -10,6 +10,7 @@ import {
   type SavedListingEntry,
 } from '@/features/listings/services/savedListings';
 import { syncSavedListingToggleRemote } from '@/features/listings/services/savedListingsSync';
+import router from '@/router';
 import type { Listing, ListingSummary } from '@/types';
 
 const savedRevision = ref(0);
@@ -53,14 +54,44 @@ export function useListingBookmark(listingId: () => string) {
     const syncedEntry = result.entries.find((entry) => entry.id === listing.id) ?? null;
     void syncSavedListingToggleRemote(uid.value, listing.id, result.saved, syncedEntry);
 
+    if (result.saved) {
+      const toast = await toastController.create({
+        message: 'Listing saved',
+        duration: 2500,
+        position: 'top',
+        color: 'success',
+        buttons: [
+          {
+            text: 'View',
+            handler: () => {
+              void router.push('/tabs/savedlistings');
+            },
+          },
+        ],
+      });
+      await toast.present();
+      return { saved: true };
+    }
+
     const toast = await toastController.create({
-      message: result.saved ? 'Listing saved' : 'Removed from saved',
-      duration: 2500,
+      message: 'Removed from saved',
+      duration: 4000,
       position: 'top',
-      color: result.saved ? 'success' : 'medium',
+      color: 'medium',
+      buttons: [
+        {
+          text: 'Undo',
+          handler: () => {
+            const undo = toggleSavedListing(uid.value, listing);
+            bumpSavedListingsRevision();
+            const entry = undo.entries.find((item) => item.id === listing.id) ?? null;
+            void syncSavedListingToggleRemote(uid.value, listing.id, undo.saved, entry);
+          },
+        },
+      ],
     });
     await toast.present();
-    return { saved: result.saved };
+    return { saved: false };
   }
 
   return {
