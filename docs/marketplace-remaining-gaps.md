@@ -1,6 +1,6 @@
 # Remaining gaps — full marketplace (no payments)
 
-Honest checklist vs a shippable marketplace **without** a payment processor. Updated 2026-11-05 (browse block-list Vitest + thread enrich cache).
+Honest checklist vs a shippable marketplace **without** a payment processor. Updated 2026-11-05 (Firestore inbox thread cap parity).
 
 Agent-store copy: Project store `docs/remaining-gaps.md`.
 
@@ -62,5 +62,6 @@ Payments / Stripe / escrow = **out of scope** (Phase 6+). Mock meetup deposits s
 9. ~~Inbox BFF deovo enable + cursor accumulate~~ **Done** (prod stays false; authenticated smoke still manual)
 10. ~~Thread enrich cache~~ **Done** (`threadEnrichCache` TTL 60s; enrichThreads cache-first)
 11. ~~Browse block-list Vitest~~ **Done** (Bearer forward + client filter + cache bust on block)
-12. Deepen MFA `marketplace.flow` when secrets present in CI
-13. Firestore thread pagination beyond page size (BFF path already accumulates)
+12. ~~Firestore inbox thread cap beyond first page~~ **Done** (`FIRESTORE_INBOX_THREAD_CAP` = 10×30; matches BFF accumulate)
+13. Deepen MFA `marketplace.flow` when secrets present in CI
+14. Cursor load-more UI if inboxes routinely exceed 300 (rare)

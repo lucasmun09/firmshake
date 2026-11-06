@@ -17,7 +17,8 @@ import {
 } from '@/common/services/firestoreAuth';
 import { subscribeNotifications } from '@/features/messages/services/notifications';
 import {
-  THREADS_PAGE_SIZE,
+  FIRESTORE_INBOX_THREAD_CAP,
+  capSortedInboxThreads,
   enrichThreads,
   mapThread,
   mergeThreads,
@@ -110,12 +111,15 @@ export function subscribeInboxThreads(
         (onSnapshotError) => onSnapshot(
           query(collection(db!, 'users', userId, 'threads')),
           (snapshot) => {
-            storedThreads = sortThreads(
+            storedThreads = capSortedInboxThreads(
               snapshot.docs.map((entry) => mapThread(entry.id, entry.data())),
-            ).slice(0, THREADS_PAGE_SIZE);
+              FIRESTORE_INBOX_THREAD_CAP,
+            );
             debugLog.debug('threads', 'Inbox threads snapshot', {
               userId,
               count: storedThreads.length,
+              cap: FIRESTORE_INBOX_THREAD_CAP,
+              rawCount: snapshot.docs.length,
             });
             emit();
           },

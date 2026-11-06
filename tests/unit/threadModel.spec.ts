@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  FIRESTORE_INBOX_THREAD_CAP,
+  THREADS_PAGE_SIZE,
+  capSortedInboxThreads,
   countBuyerThreadsForListing,
   mapThread,
   mergeThreads,
@@ -88,6 +91,30 @@ describe('threadModel', () => {
     ]);
 
     expect(sorted.map((entry) => entry.id)).toEqual(['b', 'a', 'c']);
+  });
+
+  it('caps Firestore inbox threads at BFF accumulate parity (10× page size)', () => {
+    expect(FIRESTORE_INBOX_THREAD_CAP).toBe(THREADS_PAGE_SIZE * 10);
+
+    const many = Array.from({ length: FIRESTORE_INBOX_THREAD_CAP + 5 }, (_, index) =>
+      thread({
+        id: `t-${index}`,
+        lastMessageAt: new Date(Date.UTC(2026, 0, 1, 0, 0, index)),
+      }),
+    );
+
+    const capped = capSortedInboxThreads(many);
+    expect(capped).toHaveLength(FIRESTORE_INBOX_THREAD_CAP);
+    expect(capped[0]?.id).toBe(`t-${FIRESTORE_INBOX_THREAD_CAP + 4}`);
+    expect(capped.at(-1)?.id).toBe('t-5');
+  });
+
+  it('capSortedInboxThreads leaves short lists intact (still sorted)', () => {
+    const short = [
+      thread({ id: 'old', lastMessageAt: new Date('2026-01-01T00:00:00Z') }),
+      thread({ id: 'new', lastMessageAt: new Date('2026-06-01T00:00:00Z') }),
+    ];
+    expect(capSortedInboxThreads(short).map((entry) => entry.id)).toEqual(['new', 'old']);
   });
 
   it('builds a fallback thread from a message notification', () => {

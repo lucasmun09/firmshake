@@ -8,6 +8,24 @@ import {
 
 export const THREADS_PAGE_SIZE = 30;
 
+/** Max threads kept on the Firestore subscribe path (parity with BFF `BFF_INBOX_MAX_PAGES`). */
+export const FIRESTORE_INBOX_THREAD_CAP = THREADS_PAGE_SIZE * 10;
+
+/** Newest-first cap so Firestore inbox does not silently drop past the first page. */
+export function capSortedInboxThreads(
+  threads: MessageThread[],
+  cap = FIRESTORE_INBOX_THREAD_CAP,
+): MessageThread[] {
+  if (cap <= 0) {
+    return [];
+  }
+  const sorted = sortThreads(threads);
+  if (sorted.length <= cap) {
+    return sorted;
+  }
+  return sorted.slice(0, cap);
+}
+
 export function sellerThreadDocId(listingId: string, buyerId: string): string {
   return `${listingId}_${buyerId}`;
 }

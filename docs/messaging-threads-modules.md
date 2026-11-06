@@ -31,7 +31,7 @@ Nothing console-side for this doc. Use the module map when editing inbox/thread 
 
 | Gap | Notes |
 |---|---|
-| Thread pagination beyond `THREADS_PAGE_SIZE` (30) on Firestore path | Firestore subscribe still slices to 30; **BFF path** accumulates cursor pages (`accumulateInboxThreadPages`, max 10×30) when `VITE_USE_BFF_INBOX=true`. |
+| ~~Thread pagination beyond `THREADS_PAGE_SIZE` (30) on Firestore path~~ | **Done** — Firestore subscribe uses `capSortedInboxThreads` / `FIRESTORE_INBOX_THREAD_CAP` (300). **BFF path** still accumulates cursor pages (`accumulateInboxThreadPages`, max 10×30). |
 | ~~Dedicated `threadEnrich` cache~~ | **Done** — `threadEnrichCache.ts` (60s TTL, max 200); `enrichThreads` reads cache before `getListingsByIds`. |
 | Selling buyer-thread count UI | `countBuyerThreadsForListing` is exported but unused — wire on Selling rows if product wants conversation counts. |
 | Inbox BFF prod default-on | **Devo on** (`.env.devo` / CI). Prod stays **false** until authenticated deovo smoke. |
