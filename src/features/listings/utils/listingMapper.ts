@@ -173,7 +173,7 @@ export function feedEntryPayload(
 
 /** @deprecated Prefer matchesListingSearchQuery from browseSearchRanking. */
 export function matchesListingKeyword(
-  listing: Pick<Listing, 'title' | 'sellerName'>,
+  listing: Pick<Listing, 'title' | 'sellerName' | 'description'>,
   query: string,
 ): boolean {
   return matchesListingSearchQuery(listing, query);
