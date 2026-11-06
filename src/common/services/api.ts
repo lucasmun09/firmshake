@@ -317,6 +317,7 @@ export interface BffMessageResponse {
   senderId: string;
   senderName: string;
   text: string;
+  imageUrl?: string;
   recipientId?: string;
   createdAt?: number | null;
 }
@@ -328,6 +329,7 @@ function mapBffMessageResponse(data: BffMessageResponse): Message {
     senderId: data.senderId,
     senderName: data.senderName,
     text: data.text,
+    imageUrl: data.imageUrl?.trim() || undefined,
     recipientId: data.recipientId,
     createdAt: data.createdAt ? new Date(data.createdAt) : undefined,
   };
@@ -428,6 +430,41 @@ export async function patchUserViaBff(payload: {
   }
 
   return mapBffUserProfile((await response.json()) as BffUserProfileResponse);
+}
+
+export type BffPublicUserProfile = {
+  uid: string;
+  displayName: string;
+  photoUrl?: string | null;
+};
+
+/** Guest-accessible public seller card (no email / admin fields). */
+export async function getPublicUserViaBff(uid: string): Promise<BffPublicUserProfile> {
+  if (!isApiConfigured()) {
+    throw new Error(getApiUnavailableMessage());
+  }
+
+  const response = await loggedFetch(
+    `${getApiBaseUrl()}/api/v1/users/${encodeURIComponent(uid)}/public`,
+    {
+      headers: await authHeaders(false),
+    },
+    {
+      category: 'api',
+      label: `GET /api/v1/users/${uid}/public`,
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(await parseBffUserError(response, 'Failed to load public profile'));
+  }
+
+  const data = (await response.json()) as BffPublicUserProfile;
+  return {
+    uid: data.uid,
+    displayName: data.displayName,
+    photoUrl: data.photoUrl,
+  };
 }
 
 export async function findUserByEmailViaBff(email: string): Promise<BffUserProfileResponse> {

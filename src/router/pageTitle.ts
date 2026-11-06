@@ -45,6 +45,7 @@ const ROUTE_NAME_TITLES: Record<string, string> = {
   MeetupProposal: 'Meetup',
   EditListing: 'Edit Listing',
   ListingDetail: 'Listing',
+  SellerProfile: 'Seller',
   Meetup: 'Meetup',
 };
 

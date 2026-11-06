@@ -10,6 +10,15 @@
           <ion-button
             v-if="listing"
             fill="clear"
+            aria-label="Share listing"
+            data-testid="share-listing-button"
+            @click="handleShareListing"
+          >
+            <ion-icon slot="icon-only" :icon="shareOutline" aria-hidden="true" />
+          </ion-button>
+          <ion-button
+            v-if="listing"
+            fill="clear"
             :aria-label="listingBookmarkSaved ? 'Remove from saved listings' : 'Save listing'"
             @click="handleToggleBookmark"
           >
@@ -61,7 +70,16 @@
 
           <h1>{{ listing.title }}</h1>
           <p class="price">{{ formatPrice(listing.price) }}</p>
-          <p class="seller">Seller: {{ listing.sellerName }}</p>
+          <p class="seller">
+            Seller:
+            <router-link
+              class="seller-link"
+              :to="`/seller/${listing.sellerId}`"
+              data-testid="seller-profile-link"
+            >
+              {{ listing.sellerName }}
+            </router-link>
+          </p>
           <ion-chip color="tertiary" outline>{{ categoryName }}</ion-chip>
           <p class="description">{{ listing.description }}</p>
 
@@ -84,7 +102,7 @@
           </ion-chip>
 
           <div
-            v-if="showMarkSoldAction || showDelistAction || showModeratorRemoveAction"
+            v-if="showMarkSoldAction || showDelistAction || showModeratorRemoveAction || showReportAction"
             class="moderation-actions"
           >
             <ion-button
@@ -117,6 +135,17 @@
               @click="confirmModeratorRemove"
             >
               {{ removingListing ? 'Removing...' : 'Remove listing' }}
+            </ion-button>
+            <ion-button
+              v-if="showReportAction"
+              expand="block"
+              color="medium"
+              fill="outline"
+              data-testid="report-listing-button"
+              :disabled="reportBusy"
+              @click="confirmReportListing"
+            >
+              {{ reportBusy ? 'Reporting...' : 'Report listing' }}
             </ion-button>
           </div>
         </div>
@@ -236,7 +265,9 @@ import { formatPrice } from '@/utils/currency';
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { onIonViewWillEnter } from '@ionic/vue';
-import { bookmark, bookmarkOutline } from 'ionicons/icons';
+import { bookmark, bookmarkOutline, shareOutline } from 'ionicons/icons';
+import { shareOrCopyListingLink } from '@/features/listings/utils/shareListing';
+import { submitListingReport } from '@/features/listings/services/listingReports';
 import { formatDocumentTitle } from '@/router/pageTitle';
 import {
   IonBackButton,
@@ -337,6 +368,7 @@ const communities = bootstrapCommunities;
 const loading = ref(true);
 const removingListing = ref(false);
 const markingSold = ref(false);
+const reportBusy = ref(false);
 const statusBusy = computed(() => removingListing.value || markingSold.value);
 const communityNames = ref<string[]>([]);
 const categoryName = ref('General');
@@ -571,6 +603,16 @@ const showModeratorRemoveAction = computed(() =>
       profile.value &&
       canModerateListing(profile.value, listing.value) &&
       !canDelistOwnListing(profile.value, listing.value),
+  ),
+);
+
+/** Signed-in non-sellers can flag active listings for abuse review. */
+const showReportAction = computed(() =>
+  Boolean(
+    listing.value
+      && listing.value.status === 'active'
+      && currentUser.value
+      && !isSeller.value,
   ),
 );
 
@@ -945,6 +987,121 @@ onUnmounted(() => {
   stopAgreementSubscriptions();
 });
 
+async function handleShareListing() {
+  if (!listing.value) {
+    return;
+  }
+
+  try {
+    const outcome = await shareOrCopyListingLink({
+      listingId: listing.value.id,
+      title: listing.value.title,
+    });
+
+    if (outcome === 'copied') {
+      const toast = await toastController.create({
+        message: 'Listing link copied',
+        duration: 2500,
+        color: 'success',
+      });
+      await toast.present();
+      return;
+    }
+
+    if (outcome === 'unavailable') {
+      const toast = await toastController.create({
+        message: 'Could not share listing link',
+        duration: 3000,
+        color: 'danger',
+      });
+      await toast.present();
+    }
+  } catch (error) {
+    const toast = await toastController.create({
+      message: error instanceof Error ? error.message : 'Could not share listing link',
+      duration: 3000,
+      color: 'danger',
+    });
+    await toast.present();
+  }
+}
+
+async function confirmReportListing() {
+  if (!listing.value || !currentUser.value) {
+    return;
+  }
+
+  const alert = await alertController.create({
+    header: 'Report listing?',
+    message: 'Tell us why this listing should be reviewed. False reports may lead to account limits.',
+    inputs: [
+      {
+        type: 'radio',
+        label: 'Spam or scam',
+        value: 'spam_scam',
+        checked: true,
+      },
+      {
+        type: 'radio',
+        label: 'Inappropriate content',
+        value: 'inappropriate',
+      },
+      {
+        type: 'radio',
+        label: 'Misleading or prohibited item',
+        value: 'prohibited',
+      },
+      {
+        type: 'radio',
+        label: 'Other',
+        value: 'other',
+      },
+    ],
+    buttons: [
+      { text: 'Cancel', role: 'cancel' },
+      {
+        text: 'Submit report',
+        handler: (reason) => {
+          void performReportListing(typeof reason === 'string' ? reason : 'other');
+        },
+      },
+    ],
+  });
+
+  await alert.present();
+}
+
+async function performReportListing(reason: string) {
+  if (!listing.value || !currentUser.value) {
+    return;
+  }
+
+  reportBusy.value = true;
+  try {
+    await submitListingReport({
+      listingId: listing.value.id,
+      sellerId: listing.value.sellerId,
+      reporterId: currentUser.value.uid,
+      reason,
+    });
+    const toast = await toastController.create({
+      message: 'Thanks — we received your report',
+      duration: 3000,
+      color: 'success',
+    });
+    await toast.present();
+  } catch (error) {
+    const toast = await toastController.create({
+      message: error instanceof Error ? error.message : 'Could not submit report',
+      duration: 3000,
+      color: 'danger',
+    });
+    await toast.present();
+  } finally {
+    reportBusy.value = false;
+  }
+}
+
 async function handleToggleBookmark() {
   if (!listing.value) {
     return;
@@ -1292,6 +1449,17 @@ async function performRemoveListing() {
 .seller {
   color: var(--ion-color-medium);
   margin: 0;
+}
+
+.seller-link {
+  color: var(--ion-color-primary);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.seller-link:hover,
+.seller-link:focus-visible {
+  text-decoration: underline;
 }
 
 .description {

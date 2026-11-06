@@ -23,6 +23,12 @@ describe('Marketplace soft smoke — guest mark-sold / map / blocked', () => {
       cy.get('[data-testid="mark-sold-button"]').should('not.exist');
       cy.contains('ion-button', 'Mark as sold').should('not.exist');
       cy.contains('ion-button', 'Block user').should('not.exist');
+      cy.get('[data-testid="share-listing-button"], ion-button[aria-label="Share listing"]').should(
+        'exist',
+      );
+      cy.get('[data-testid="seller-profile-link"]').click({ force: true });
+      cy.url({ timeout: 15_000 }).should('match', /\/seller\//);
+      cy.get('[data-testid="seller-display-name"], h1', { timeout: 15_000 }).should('be.visible');
     });
   });
 

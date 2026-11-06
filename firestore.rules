@@ -207,8 +207,24 @@ service cloud.firestore {
         allow create: if isSignedIn()
           && request.resource.data.senderId == request.auth.uid
           && request.resource.data.text is string
-          && request.resource.data.text.size() > 0
           && request.resource.data.text.size() <= 1000
+          && (
+            request.resource.data.text.size() > 0
+            || (
+              request.resource.data.keys().hasAll(['imageUrl'])
+              && request.resource.data.imageUrl is string
+              && request.resource.data.imageUrl.size() > 0
+              && request.resource.data.imageUrl.size() <= 2048
+            )
+          )
+          && (
+            !('imageUrl' in request.resource.data)
+            || (
+              request.resource.data.imageUrl is string
+              && request.resource.data.imageUrl.size() > 0
+              && request.resource.data.imageUrl.size() <= 2048
+            )
+          )
           && request.resource.data.recipientId is string
           && request.resource.data.recipientId.size() > 0
           && (
@@ -328,6 +344,23 @@ service cloud.firestore {
 
     match /controlpanelOperators/{operatorId} {
       allow read, write: if false;
+    }
+
+    // Buyer abuse flags — create by signed-in reporters only; review is admin/ops.
+    match /listingReports/{reportId} {
+      allow create: if isSignedIn()
+        && request.resource.data.reporterId == request.auth.uid
+        && request.resource.data.listingId is string
+        && request.resource.data.listingId.size() > 0
+        && request.resource.data.sellerId is string
+        && request.resource.data.sellerId.size() > 0
+        && request.resource.data.sellerId != request.auth.uid
+        && request.resource.data.reason in ['spam_scam', 'inappropriate', 'prohibited', 'other']
+        && request.resource.data.status == 'open'
+        && request.resource.data.details is string
+        && request.resource.data.details.size() <= 500;
+      allow read: if isSignedIn() && isSuperAdminCaller();
+      allow update, delete: if false;
     }
   }
 }

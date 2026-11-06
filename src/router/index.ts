@@ -260,6 +260,12 @@ const routes: Array<RouteRecordRaw> = [
     meta: { guestAccessible: true },
   },
   {
+    path: '/seller/:sellerId',
+    name: 'SellerProfile',
+    component: () => import('@/features/listings/views/SellerProfilePage.vue'),
+    meta: { guestAccessible: true },
+  },
+  {
     path: '/meetup/:id',
     name: 'Meetup',
     component: () => import('@/features/meetups/views/MeetupPage.vue'),
