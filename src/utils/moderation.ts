@@ -61,6 +61,14 @@ export function canDelistOwnListing(
   return listing.sellerId === profile.uid;
 }
 
+/** Seller-only: mark an active listing as sold (not a moderator action). */
+export function canMarkListingSold(
+  profile: UserProfile | null | undefined,
+  listing: Listing,
+): boolean {
+  return canDelistOwnListing(profile, listing);
+}
+
 export function canRemoveListing(
   profile: UserProfile | null | undefined,
   listing: Listing,

@@ -290,6 +290,27 @@ export async function removeListingViaBff(listingId: string): Promise<Listing> {
   return mapBffListingResponse(data);
 }
 
+export async function markListingSoldViaBff(listingId: string): Promise<Listing> {
+  if (!isApiConfigured()) {
+    throw new Error(getApiUnavailableMessage());
+  }
+
+  const response = await loggedFetch(`${getApiBaseUrl()}/api/v1/listings/${listingId}/sold`, {
+    method: 'POST',
+    headers: await authHeaders(true),
+  }, {
+    category: 'listing',
+    label: `POST /api/v1/listings/${listingId}/sold`,
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseBffListingError(response, 'Failed to mark listing as sold'));
+  }
+
+  const data = (await response.json()) as BffListingResponse;
+  return mapBffListingResponse(data);
+}
+
 export interface BffMessageResponse {
   id: string;
   listingId: string;

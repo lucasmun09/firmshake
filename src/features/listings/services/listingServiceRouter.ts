@@ -3,7 +3,7 @@
  */
 import { useBffListings } from '@/common/config/featureFlags';
 import type { Listing, UserProfile } from '@/types';
-import { canRemoveListing } from '@/utils/moderation';
+import { canMarkListingSold, canRemoveListing } from '@/utils/moderation';
 
 import * as listingBff from './listingBff';
 import type { CreateListingInput, UpdateListingInput } from './listingBff';
@@ -73,4 +73,27 @@ export async function routeRemoveListing(
     return listingBff.removeListing(listingId);
   }
   return listingFirestoreWrites.removeListing(listingId, actor, existing);
+}
+
+export async function routeMarkListingSold(
+  listingId: string,
+  actor: UserProfile,
+): Promise<Listing> {
+  const existing = await getListingById(listingId);
+  if (!existing) {
+    throw new Error('Listing not found');
+  }
+
+  if (existing.status !== 'active') {
+    throw new Error('This listing is no longer active');
+  }
+
+  if (!canMarkListingSold(actor, existing)) {
+    throw new Error('Only the seller can mark this listing as sold');
+  }
+
+  if (useBffListings()) {
+    return listingBff.markListingSold(listingId);
+  }
+  return listingFirestoreWrites.markListingSold(listingId, actor, existing);
 }

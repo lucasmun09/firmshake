@@ -144,3 +144,33 @@ export async function removeListing(
 
   return removed;
 }
+
+/** Direct Firestore mark-sold. Caller must validate seller + active status. */
+export async function markListingSold(
+  listingId: string,
+  actor: UserProfile,
+  existing: Listing,
+): Promise<Listing> {
+  const firestore = assertDb();
+
+  await updateDoc(doc(firestore, 'listings', listingId), {
+    status: 'sold',
+    soldAt: serverTimestamp(),
+    soldBy: actor.uid,
+    updatedAt: serverTimestamp(),
+  });
+
+  const sold: Listing = {
+    ...existing,
+    status: 'sold',
+  };
+
+  try {
+    await updateListingFeedStatus(listingId, 'sold', existing.communityIds);
+    await syncListingSearchIndex(buildListingSearchDocument(sold));
+  } catch (error) {
+    console.warn('Listing marked sold, but feed/search sync failed', error);
+  }
+
+  return sold;
+}

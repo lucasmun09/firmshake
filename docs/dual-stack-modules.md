@@ -37,6 +37,8 @@ Messaging / inbox thread split (non-payments): `docs/messaging-threads-modules.m
 
 Saved listings / bookmarks sync (non-payments): `docs/saved-listings-sync.md` — `savedListings.ts` (local), `savedListingsRemote.ts`, `savedListingsMerge.ts`, `savedListingsSync.ts`.
 
+Mark listing sold (non-payments): seller-only `canMarkListingSold` / `routeMarkListingSold` / Firestore `markListingSold` + BFF `POST /api/v1/listings/:id/sold` (`mark_listing_sold` in API). Remaining product gaps: `docs/marketplace-remaining-gaps.md`.
+
 ## Health / ready contract (lockstep with API)
 
 `GET {API}/health` and `GET {API}/ready` return:

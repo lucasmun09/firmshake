@@ -55,6 +55,9 @@
           <ion-note v-if="listing.status === 'removed'" color="warning" class="removed-banner">
             This listing has been delisted and is no longer available.
           </ion-note>
+          <ion-note v-else-if="listing.status === 'sold'" color="medium" class="removed-banner">
+            This listing has been marked as sold.
+          </ion-note>
 
           <h1>{{ listing.title }}</h1>
           <p class="price">{{ formatPrice(listing.price) }}</p>
@@ -80,13 +83,26 @@
             {{ name }}
           </ion-chip>
 
-          <div v-if="showDelistAction || showModeratorRemoveAction" class="moderation-actions">
+          <div
+            v-if="showMarkSoldAction || showDelistAction || showModeratorRemoveAction"
+            class="moderation-actions"
+          >
+            <ion-button
+              v-if="showMarkSoldAction"
+              expand="block"
+              color="success"
+              fill="solid"
+              :disabled="statusBusy"
+              @click="confirmMarkSold"
+            >
+              {{ markingSold ? 'Marking sold...' : 'Mark as sold' }}
+            </ion-button>
             <ion-button
               v-if="showDelistAction"
               expand="block"
               color="medium"
               fill="outline"
-              :disabled="removingListing"
+              :disabled="statusBusy"
               @click="confirmDelist"
             >
               {{ removingListing ? 'Delisting...' : 'Delist item' }}
@@ -96,7 +112,7 @@
               expand="block"
               color="danger"
               fill="outline"
-              :disabled="removingListing"
+              :disabled="statusBusy"
               @click="confirmModeratorRemove"
             >
               {{ removingListing ? 'Removing...' : 'Remove listing' }}
@@ -279,7 +295,11 @@ import {
   getStaleCategories,
 } from '@/features/listings/services/categories';
 import { getCommunityName } from '@/features/communities/services/communities';
-import { getListingById, removeListing } from '@/features/listings/services/listings';
+import {
+  getListingById,
+  markListingSold,
+  removeListing,
+} from '@/features/listings/services/listings';
 import { prefetchAuthenticatedImages } from '@/common/services/images';
 import {
   getMessageAccessOptions,
@@ -294,6 +314,7 @@ import { blockUser, subscribeUserBlocked, unblockUser } from '@/common/services/
 import { syncMessageThreadForUser } from '@/features/messages/services/threads';
 import {
   canDelistOwnListing,
+  canMarkListingSold,
   canModerateListing,
 } from '@/utils/moderation';
 import {
@@ -314,6 +335,8 @@ const profile = bootstrapProfile;
 const communities = bootstrapCommunities;
 const loading = ref(true);
 const removingListing = ref(false);
+const markingSold = ref(false);
+const statusBusy = computed(() => removingListing.value || markingSold.value);
 const communityNames = ref<string[]>([]);
 const categoryName = ref('General');
 const categories = ref<Awaited<ReturnType<typeof fetchCategories>>>([]);
@@ -532,6 +555,10 @@ const isSeller = computed(
 );
 
 const isGuest = computed(() => authReady.value && !currentUser.value);
+
+const showMarkSoldAction = computed(() =>
+  Boolean(listing.value && profile.value && canMarkListingSold(profile.value, listing.value)),
+);
 
 const showDelistAction = computed(() =>
   Boolean(listing.value && profile.value && canDelistOwnListing(profile.value, listing.value)),
@@ -1090,6 +1117,28 @@ async function handleStartMeetup(agreementId: string) {
   }
 }
 
+async function confirmMarkSold() {
+  if (!listing.value || !profile.value) {
+    return;
+  }
+
+  const alert = await alertController.create({
+    header: 'Mark as sold?',
+    message: 'This removes the listing from browse and tells buyers it is no longer available.',
+    buttons: [
+      { text: 'Cancel', role: 'cancel' },
+      {
+        text: 'Mark sold',
+        handler: () => {
+          void performMarkSold();
+        },
+      },
+    ],
+  });
+
+  await alert.present();
+}
+
 async function confirmDelist() {
   if (!listing.value || !profile.value) {
     return;
@@ -1111,6 +1160,37 @@ async function confirmDelist() {
   });
 
   await alert.present();
+}
+
+async function performMarkSold() {
+  if (!listing.value || !profile.value) {
+    return;
+  }
+
+  markingSold.value = true;
+
+  try {
+    const updated = await markListingSold(listing.value.id, profile.value);
+    listing.value = updated;
+
+    const toast = await toastController.create({
+      message: 'Listing marked as sold',
+      duration: 2500,
+      color: 'success',
+    });
+    await toast.present();
+
+    void router.replace('/tabs/selling');
+  } catch (error) {
+    const toast = await toastController.create({
+      message: error instanceof Error ? error.message : 'Could not mark listing as sold',
+      duration: 3000,
+      color: 'danger',
+    });
+    await toast.present();
+  } finally {
+    markingSold.value = false;
+  }
 }
 
 async function confirmModeratorRemove() {

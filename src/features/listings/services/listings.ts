@@ -19,6 +19,7 @@ import { mapListing } from '@/features/listings/utils/listingMapper';
 import { fetchBrowsePage } from '@/features/listings/services/listingFeed';
 import {
   routeCreateListing,
+  routeMarkListingSold,
   routeRemoveListing,
   routeUpdateListing,
   shouldRouteListingsViaBff,
@@ -290,6 +291,17 @@ export async function removeListing(
   }
 
   return routeRemoveListing(listingId, actor);
+}
+
+export async function markListingSold(
+  listingId: string,
+  actor: UserProfile,
+): Promise<Listing> {
+  if (!db) {
+    throw new Error('Firestore is not configured');
+  }
+
+  return routeMarkListingSold(listingId, actor);
 }
 
 export function subscribeSellerListings(

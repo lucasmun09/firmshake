@@ -1,5 +1,6 @@
 import {
   createListingViaBff,
+  markListingSoldViaBff,
   removeListingViaBff,
   updateListingViaBff,
 } from '@/common/services/api';
@@ -47,4 +48,9 @@ export async function updateListing(
 /** Remove a listing through firmshake-api (seller or moderator). */
 export async function removeListing(listingId: string): Promise<Listing> {
   return removeListingViaBff(listingId);
+}
+
+/** Mark a listing sold through firmshake-api (seller only). */
+export async function markListingSold(listingId: string): Promise<Listing> {
+  return markListingSoldViaBff(listingId);
 }

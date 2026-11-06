@@ -6,9 +6,11 @@ const useBffListings = vi.fn(() => false);
 const createListingBff = vi.fn();
 const updateListingBff = vi.fn();
 const removeListingBff = vi.fn();
+const markListingSoldBff = vi.fn();
 const createListingFirestore = vi.fn();
 const updateListingFirestore = vi.fn();
 const removeListingFirestore = vi.fn();
+const markListingSoldFirestore = vi.fn();
 const getListingById = vi.fn();
 
 vi.mock('@/common/config/featureFlags', () => ({
@@ -19,12 +21,14 @@ vi.mock('@/features/listings/services/listingBff', () => ({
   createListing: (...args: unknown[]) => createListingBff(...args),
   updateListing: (...args: unknown[]) => updateListingBff(...args),
   removeListing: (...args: unknown[]) => removeListingBff(...args),
+  markListingSold: (...args: unknown[]) => markListingSoldBff(...args),
 }));
 
 vi.mock('@/features/listings/services/listingFirestoreWrites', () => ({
   createListing: (...args: unknown[]) => createListingFirestore(...args),
   updateListing: (...args: unknown[]) => updateListingFirestore(...args),
   removeListing: (...args: unknown[]) => removeListingFirestore(...args),
+  markListingSold: (...args: unknown[]) => markListingSoldFirestore(...args),
 }));
 
 vi.mock('@/features/listings/services/listings', () => ({
@@ -33,6 +37,7 @@ vi.mock('@/features/listings/services/listings', () => ({
 
 vi.mock('@/utils/moderation', () => ({
   canRemoveListing: () => true,
+  canMarkListingSold: () => true,
 }));
 
 const sampleListing: Listing = {
@@ -73,6 +78,8 @@ describe('listingServiceRouter', () => {
     updateListingFirestore.mockResolvedValue(sampleListing);
     removeListingBff.mockResolvedValue({ ...sampleListing, status: 'removed' });
     removeListingFirestore.mockResolvedValue({ ...sampleListing, status: 'removed' });
+    markListingSoldBff.mockResolvedValue({ ...sampleListing, status: 'sold' });
+    markListingSoldFirestore.mockResolvedValue({ ...sampleListing, status: 'sold' });
   });
 
   it('routes create to Firestore when BFF flag is off', async () => {
@@ -138,6 +145,30 @@ describe('listingServiceRouter', () => {
 
     expect(removeListingFirestore).toHaveBeenCalledWith('listing-1', actor, sampleListing);
     expect(removeListingBff).not.toHaveBeenCalled();
+  });
+
+  it('routes mark-sold to Firestore when BFF flag is off', async () => {
+    const { routeMarkListingSold } = await import(
+      '@/features/listings/services/listingServiceRouter'
+    );
+
+    await expect(routeMarkListingSold('listing-1', actor)).resolves.toMatchObject({
+      status: 'sold',
+    });
+    expect(markListingSoldFirestore).toHaveBeenCalledWith('listing-1', actor, sampleListing);
+    expect(markListingSoldBff).not.toHaveBeenCalled();
+  });
+
+  it('routes mark-sold to BFF when flag is on', async () => {
+    useBffListings.mockReturnValue(true);
+    const { routeMarkListingSold } = await import(
+      '@/features/listings/services/listingServiceRouter'
+    );
+
+    await routeMarkListingSold('listing-1', actor);
+
+    expect(markListingSoldBff).toHaveBeenCalledWith('listing-1');
+    expect(markListingSoldFirestore).not.toHaveBeenCalled();
   });
 
   it('throws when listing is missing on update', async () => {
