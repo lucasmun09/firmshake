@@ -6,9 +6,10 @@ describeWithMfaAuth('Settings — navigation and toolbar', () => {
     cy.skipIfMfaGate();
   });
 
-  it('opens settings from the browse gear icon without errors', () => {
+  it('opens settings from the profile menu without errors', () => {
     cy.visitApp('/tabs/home');
-    cy.get('ion-button[aria-label="Settings"]', { timeout: 15_000 }).click();
+    cy.get('[data-testid="toolbar-profile-menu"]', { timeout: 15_000 }).click();
+    cy.get('[data-testid="toolbar-menu-settings"]', { timeout: 10_000 }).click();
     cy.url({ timeout: 15_000 }).should('include', '/tabs/profile');
     cy.url().should('not.include', '/internal-error');
     cy.contains('.toolbar-title', 'FirmShake - Settings').should('be.visible');

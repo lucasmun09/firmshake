@@ -25,28 +25,60 @@
           </template>
 
           <template v-else>
-            <div class="profile-text">
-              <span v-if="showAdminBadge" class="admin-badge admin-badge--inline">ADMIN</span>
-              <span class="profile-name">{{ profileDisplayName }}</span>
-              <span v-if="profileEmail" class="profile-email">{{ profileEmail }}</span>
-            </div>
-
-            <div class="profile-avatar-wrap">
-              <UserAvatar
-                :name="profile?.displayName"
-                :photo-url="profile?.photoUrl"
-                :size="avatarSize"
-              />
-              <span v-if="showAdminBadge" class="admin-badge admin-badge--overlay">ADMIN</span>
-            </div>
-
-            <ion-button
-              aria-label="Settings"
-              class="settings-btn"
-              @click="goToSettings"
+            <button
+              id="toolbar-profile-menu"
+              type="button"
+              class="profile-menu-trigger"
+              aria-label="Profile menu"
+              aria-haspopup="menu"
+              data-testid="toolbar-profile-menu"
             >
-              <ion-icon slot="icon-only" :icon="settingsOutline" />
-            </ion-button>
+              <div class="profile-text">
+                <span v-if="showAdminBadge" class="admin-badge admin-badge--inline">ADMIN</span>
+                <span class="profile-name">{{ profileDisplayName }}</span>
+                <span v-if="profileEmail" class="profile-email">{{ profileEmail }}</span>
+              </div>
+
+              <div class="profile-avatar-wrap">
+                <UserAvatar
+                  :name="profile?.displayName"
+                  :photo-url="profile?.photoUrl"
+                  :size="avatarSize"
+                />
+                <span v-if="showAdminBadge" class="admin-badge admin-badge--overlay">ADMIN</span>
+              </div>
+            </button>
+
+            <ion-popover
+              trigger="toolbar-profile-menu"
+              dismiss-on-select
+              side="bottom"
+              alignment="end"
+              class="profile-menu-popover"
+            >
+              <ion-content>
+                <ion-list lines="none" class="profile-menu-list">
+                  <ion-item
+                    button
+                    :detail="false"
+                    data-testid="toolbar-menu-settings"
+                    @click="goToSettings"
+                  >
+                    <ion-icon slot="start" :icon="settingsOutline" aria-hidden="true" />
+                    <ion-label>Settings</ion-label>
+                  </ion-item>
+                  <ion-item
+                    button
+                    :detail="false"
+                    data-testid="toolbar-menu-logout"
+                    @click="handleLogout"
+                  >
+                    <ion-icon slot="start" :icon="logOutOutline" aria-hidden="true" />
+                    <ion-label>Log out</ion-label>
+                  </ion-item>
+                </ion-list>
+              </ion-content>
+            </ion-popover>
 
             <ion-button
               aria-label="Notifications"
@@ -75,12 +107,17 @@ import {
   IonBadge,
   IonButton,
   IonButtons,
+  IonContent,
   IonHeader,
   IonIcon,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonPopover,
   IonToolbar,
   useIonRouter,
 } from '@ionic/vue';
-import { notificationsOutline, settingsOutline } from 'ionicons/icons';
+import { logOutOutline, notificationsOutline, settingsOutline } from 'ionicons/icons';
 
 import NotificationPanel from '@/features/messages/components/NotificationPanel.vue';
 import FirmShakeLogo from '@/components/FirmShakeLogo.vue';
@@ -90,7 +127,7 @@ import {
   formatToolbarTitle,
   splitToolbarTitle,
 } from '@/common/utils/toolbarTitle';
-import { authReady, resolveSessionUser } from '@/features/auth/services/auth';
+import { authReady, logout, resolveSessionUser } from '@/features/auth/services/auth';
 import { subscribeUnreadNotificationCount } from '@/features/messages/services/notifications';
 import { isSuperAdmin } from '@/utils/moderation';
 import { isMobileWeb, isMobileWebViewport } from '@/utils/platform';
@@ -134,6 +171,11 @@ let unsubscribeNotifications: (() => void) | undefined;
 
 function goToSettings() {
   ionRouter.navigate('/tabs/profile', 'forward', 'push');
+}
+
+async function handleLogout() {
+  await logout();
+  ionRouter.navigate('/login', 'root', 'replace');
 }
 
 function goToLoginCreate() {
@@ -312,6 +354,26 @@ onUnmounted(() => {
   text-align: end;
 }
 
+.profile-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  max-width: min(100%, 22rem);
+}
+
+.profile-menu-trigger:focus-visible {
+  outline: 2px solid var(--ion-color-primary-contrast);
+  outline-offset: 2px;
+  border-radius: 0.35rem;
+}
+
 .profile-avatar-wrap {
   position: relative;
   flex-shrink: 0;
@@ -320,7 +382,6 @@ onUnmounted(() => {
   padding-inline: 0.1rem 0.05rem;
 }
 
-.settings-btn,
 .notification-btn,
 .login-create-btn {
   flex-shrink: 0;
@@ -339,21 +400,26 @@ onUnmounted(() => {
   text-transform: none;
 }
 
-.settings-btn,
-.notification-btn {
-  --padding-start: 0.15rem;
-  --padding-end: 0.1rem;
-}
-
-.settings-btn ion-icon,
-.notification-btn ion-icon {
-  font-size: 1.35rem;
-}
-
 .notification-btn {
   position: relative;
   --padding-start: 0.2rem;
   --padding-end: 0.3rem;
+}
+
+.notification-btn ion-icon {
+  font-size: 1.35rem;
+}
+
+.profile-menu-list {
+  margin: 0;
+  padding: var(--fs-space-xs) 0;
+  min-width: 11rem;
+}
+
+.profile-menu-list ion-icon {
+  color: var(--ion-color-medium);
+  font-size: 1.15rem;
+  margin-inline-end: var(--fs-space-xs);
 }
 
 .notification-badge {
@@ -406,13 +472,11 @@ onUnmounted(() => {
     height: 2rem;
   }
 
-  .settings-btn,
   .notification-btn {
     height: 2.35rem;
     min-height: 2.35rem;
   }
 
-  .settings-btn ion-icon,
   .notification-btn ion-icon {
     font-size: 1.55rem;
   }
