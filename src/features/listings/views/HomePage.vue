@@ -45,6 +45,9 @@
               class="search-filter-row__search"
               placeholder="Search listings"
               :debounce="0"
+              enterkeyhint="search"
+              data-testid="browse-searchbar"
+              @keydown.enter.prevent="flushBrowseSearch"
             />
           </div>
         </AppContentFrame>
@@ -296,9 +299,18 @@
           <ion-spinner name="circular" />
         </div>
 
-        <div v-else-if="showNoListings" class="empty-state">
-          <p>{{ noListingsMessage }}</p>
-          <ion-note>{{ noListingsHint }}</ion-note>
+        <div v-else-if="showNoListings" class="empty-state" data-testid="browse-empty-state">
+          <p>{{ browseEmptyState.message }}</p>
+          <ion-note>{{ browseEmptyState.hint }}</ion-note>
+          <ion-button
+            v-if="browseEmptyState.showClearFilters"
+            fill="outline"
+            class="browse-empty-clear"
+            data-testid="browse-clear-filters"
+            @click="clearBrowseFilters"
+          >
+            Clear filters
+          </ion-button>
         </div>
 
         <div v-else-if="effectiveViewMode === 'cards'" class="browse-cards-wrap">
@@ -469,6 +481,7 @@ import {
 } from '@/features/listings/services/geoFilterStorage';
 import { scheduleBrowseListingImagePrefetch } from '@/features/listings/utils/browseListingImagePrefetch';
 import { applyBrowseFilters as applyBrowseListingFilters } from '@/features/listings/utils/browseFilters';
+import { resolveBrowseEmptyState } from '@/features/listings/utils/browseEmptyState';
 import {
   appendUniqueBrowseListings,
   filterLoadedBrowseListings,
@@ -882,6 +895,15 @@ function applyLocalSearchPreview() {
   }
 }
 
+async function scrollBrowseToTop() {
+  const ionContent = contentRef.value as { $el?: { scrollToTop?: (duration?: number) => Promise<void> } } | null;
+  try {
+    await ionContent?.$el?.scrollToTop?.(300);
+  } catch {
+    // Ignore scroll errors on missing content.
+  }
+}
+
 async function applyFilters() {
   applyDraftToApplied();
   filterApplying.value = true;
@@ -889,6 +911,7 @@ async function applyFilters() {
   listings.value = [];
   resetBrowseLoadedPool();
   const startedAt = Date.now();
+  void scrollBrowseToTop();
 
   try {
     invalidateCurrentListingCache();
@@ -904,6 +927,40 @@ async function applyFilters() {
 
 function applyFiltersAndClose() {
   void applyFilters().then(() => closeSidebar());
+}
+
+function flushBrowseSearch() {
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = undefined;
+  }
+  void applyDebouncedSearch().then(() => scrollBrowseToTop());
+}
+
+async function clearBrowseFilters() {
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = undefined;
+  }
+  draftSearchQuery.value = '';
+  draftCategory.value = '';
+  draftPriceMin.value = '';
+  draftPriceMax.value = '';
+  draftSort.value = 'newest';
+  draftGeoFilter.value = defaultGeoFilterState();
+  applyDraftToApplied();
+  closeSidebar();
+  filterApplying.value = true;
+  loading.value = true;
+  listings.value = [];
+  resetBrowseLoadedPool();
+  void scrollBrowseToTop();
+  try {
+    invalidateCurrentListingCache();
+    await loadInitialListings({ skipStalePlaceholder: true });
+  } finally {
+    filterApplying.value = false;
+  }
 }
 
 function browseCacheUid(): string {
@@ -1408,19 +1465,17 @@ const showNoListings = computed(
     listings.value.length === 0,
 );
 
-const noListingsMessage = computed(() => {
-  if (isAppliedGeoActive.value) {
-    const center = appliedGeoFilter.value.label || 'your location';
-    return `No listings within ${appliedGeoFilter.value.radiusMiles} mi of ${center}.`;
-  }
-
-  return `No listings yet in ${selectedCommunityName.value}.`;
-});
-
-const noListingsHint = computed(() =>
-  isAppliedGeoActive.value
-    ? 'Try increasing the radius or choosing a different location.'
-    : 'Be the first to list something for sale.',
+const browseEmptyState = computed(() =>
+  resolveBrowseEmptyState({
+    communityName: selectedCommunityName.value,
+    searchQuery: appliedSearchQuery.value,
+    categoryId: appliedCategory.value,
+    priceMin: appliedPriceMin.value,
+    priceMax: appliedPriceMax.value,
+    geoActive: isAppliedGeoActive.value,
+    geoLabel: appliedGeoFilter.value.label,
+    geoRadiusMiles: appliedGeoFilter.value.radiusMiles,
+  }),
 );
 
 const showUpdatingIndicator = computed(
@@ -2666,6 +2721,10 @@ function communityLabel(communityIds: string[]): string {
   flex-direction: column;
   align-items: center;
   gap: 1rem;
+}
+
+.browse-empty-clear {
+  margin-top: var(--fs-space-xs);
 }
 
 .mobile-filter-toggle {

@@ -28,7 +28,7 @@
             <ion-label>
               <h2>{{ entry.title }}</h2>
               <p>{{ formatPrice(entry.price) }}</p>
-              <p class="saved-at">Saved {{ formatSavedAt(entry.savedAt) }}</p>
+              <p class="saved-at">Saved {{ formatRelativeTime(entry.savedAt) }}</p>
             </ion-label>
             <ListingBookmarkButton
               slot="end"
@@ -61,6 +61,7 @@ import ListingBookmarkButton from '@/features/listings/components/ListingBookmar
 import { useListingBookmark, useSavedListingsEntries } from '@/features/listings/composables/useListingBookmark';
 import { listingDetailPath } from '@/features/listings/utils/browseMapView';
 import type { SavedListingEntry } from '@/features/listings/services/savedListings';
+import { formatRelativeTime } from '@/common/utils/formatRelativeTime';
 import { formatPrice } from '@/utils/currency';
 
 const { entries } = useSavedListingsEntries();
@@ -77,13 +78,6 @@ async function onUnsave(listingId: string, entry: SavedListingEntry) {
     communityIds: [],
     primaryCategoryId: '',
   });
-}
-
-function formatSavedAt(savedAt: number): string {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(savedAt));
 }
 </script>
 
